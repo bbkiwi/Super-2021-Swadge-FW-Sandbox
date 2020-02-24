@@ -4,6 +4,13 @@
 #include "bresenham.h"
 #include "font.h"
 
+#define RING_DEBUG_PRINT
+#ifdef RING_DEBUG_PRINT
+    #define ring_printf(...) os_printf(__VA_ARGS__)
+#else
+    #define ring_printf(...)
+#endif
+
 typedef struct
 {
     p2pInfo p2p;
@@ -245,7 +252,8 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
                     p2pStopConnection(&connections[i].p2p);
                 }
             }
-            os_snprintf(lastMsg, sizeof(lastMsg), "%s: %s\n", conStr, (evt == RX_BROADCAST) ? "RX_BROADCAST" : ((evt == RX_GAME_START_ACK) ? "RX_GAME_START_ACK" : "RX_GAME_START_MSG") );
+            os_snprintf(lastMsg, sizeof(lastMsg), "%s: %s\n", conStr,
+                        (evt == RX_BROADCAST) ? "RX_BROADCAST" : ((evt == RX_GAME_START_ACK) ? "RX_GAME_START_ACK" : "RX_GAME_START_MSG") );
             break;
         }
         case CON_ESTABLISHED:
@@ -266,7 +274,7 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
             break;
         }
     }
-    os_printf("%s", lastMsg);
+    ring_printf("%s", lastMsg);
     ringUpdateDisplay();
     return;
 }
@@ -294,7 +302,7 @@ void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload _
     }
 
     os_snprintf(lastMsg, sizeof(lastMsg), "Received %d bytes from %s\n", len, getRingConnection(p2p)->lbl);
-    os_printf("%s", lastMsg);
+    ring_printf("%s", lastMsg);
     ringUpdateDisplay();
     return;
 }
@@ -328,7 +336,7 @@ void ICACHE_FLASH_ATTR ringMsgTxCbFn(p2pInfo* p2p, messageStatus_t status)
             break;
         }
     }
-    os_printf("%s", lastMsg);
+    ring_printf("%s", lastMsg);
     ringUpdateDisplay();
     return;
 }

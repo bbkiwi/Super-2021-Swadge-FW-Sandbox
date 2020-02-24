@@ -84,7 +84,8 @@ static void ICACHE_FLASH_ATTR pollAccel(void* arg);
 void ICACHE_FLASH_ATTR initializeAccelerometer(void);
 static void ICACHE_FLASH_ATTR returnToMenuTimerFunc(void* arg);
 
-#if SWADGE_VERSION == SWADGE_2019
+#define OLD_MODE_CHANGE
+#if defined(OLD_MODE_CHANGE) || SWADGE_VERSION != SWADGE_2019
     void ICACHE_FLASH_ATTR incrementSwadgeMode(void);
 #endif
 
@@ -359,7 +360,7 @@ void ExitCritical(void)
 /*============================================================================
  * Swadge Mode Utility Functions
  *==========================================================================*/
-#if SWADGE_VERSION == SWADGE_2019
+#if defined(OLD_MODE_CHANGE) || SWADGE_VERSION != SWADGE_2019
 void ICACHE_FLASH_ATTR switchToSwadgeMode(uint8_t newMode)
 {
     (void) newMode;
@@ -372,10 +373,10 @@ void ICACHE_FLASH_ATTR switchToSwadgeMode(uint8_t newMode)
  * If the reboot timer is running, it will be reset
  *
  */
-#if SWADGE_VERSION != SWADGE_2019
-    void ICACHE_FLASH_ATTR switchToSwadgeMode(uint8_t newMode)
-#else
+#if defined(OLD_MODE_CHANGE) || SWADGE_VERSION != SWADGE_2019
     void ICACHE_FLASH_ATTR incrementSwadgeMode(void)
+#else
+    void ICACHE_FLASH_ATTR switchToSwadgeMode(uint8_t newMode)
 #endif
 {
     // If the mode is initialized, tear it down
@@ -409,10 +410,10 @@ void ICACHE_FLASH_ATTR switchToSwadgeMode(uint8_t newMode)
     }
 
     // Switch to the next mode, or start from the beginning if we're at the end
-#if SWADGE_VERSION != SWADGE_2019
-    rtcMem.currentSwadgeMode = newMode;
-#else
+#if defined(OLD_MODE_CHANGE) || SWADGE_VERSION != SWADGE_2019
     rtcMem.currentSwadgeMode = (rtcMem.currentSwadgeMode + 1) % (sizeof(swadgeModes) / sizeof(swadgeModes[0]));
+#else
+    rtcMem.currentSwadgeMode = newMode;
 #endif
     // Write the RTC memory so it knows what mode to be in when waking up
     system_rtc_mem_write(RTC_MEM_ADDR, &rtcMem, sizeof(rtcMem));
@@ -520,7 +521,10 @@ void ICACHE_FLASH_ATTR swadgeModeButtonCallback(uint8_t state, int button, int d
 {
     if(0 == button)
     {
-#if SWADGE_VERSION != SWADGE_2019
+#if defined(OLD_MODE_CHANGE) || SWADGE_VERSION != SWADGE_2019
+        // Switch the mode
+        incrementSwadgeMode();
+#else
         // If the menu button was pressed
         if(0 == rtcMem.currentSwadgeMode)
         {
@@ -538,9 +542,6 @@ void ICACHE_FLASH_ATTR swadgeModeButtonCallback(uint8_t state, int button, int d
             os_timer_disarm(&timerHandleReturnToMenu);
             zeroMenuBar();
         }
-#else
-        // Switch the mode
-        incrementSwadgeMode();
 #endif
     }
     //NOTE for 2020 button 0 can only be used for menu, if want to be able to use momentary press in other modes

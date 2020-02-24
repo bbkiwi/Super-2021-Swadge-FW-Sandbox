@@ -17,6 +17,7 @@
 #include "espNowUtils.h"
 #include "user_main.h"
 
+//#define SNIFFER_OUTPUT
 /*============================================================================
  * Variables
  *==========================================================================*/
@@ -160,6 +161,40 @@ void ICACHE_FLASH_ATTR espNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_t le
               mac_addr[1],
               mac_addr[2],
               mac_addr[3],
+              mac_addr[4],
+              mac_addr[5],
+              rssi,
+              dbg);
+#endif
+
+#ifdef SNIFFER_OUTPUT
+    // for use to sniff all espnow, short mac, rssi and data as char
+    char dbg[256] = {0};
+    char tmp[8] = {0};
+    int i;
+    uint8_t mi;
+    mi = len < 11 ? len : 11;
+    for (i = 0; i < mi; i++)
+    {
+        ets_sprintf(tmp, "%c", data[i]);
+        strcat(dbg, tmp);
+    }
+    if (len > 27)
+    {
+        strcat(dbg, "  [");
+        for (i = 23; i < 28; i++)
+        {
+            ets_sprintf(tmp, "%c", data[i]);
+            strcat(dbg, tmp);
+        }
+        strcat(dbg, "]  ");
+        for (i = 28; i < len; i++)
+        {
+            ets_sprintf(tmp, "%c", data[i]);
+            strcat(dbg, tmp);
+        }
+    }
+    os_printf("[%02X:%02X](%d) %s\r\n",
               mac_addr[4],
               mac_addr[5],
               rssi,
