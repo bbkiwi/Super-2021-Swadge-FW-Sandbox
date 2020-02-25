@@ -3,6 +3,7 @@
 #include "buttons.h"
 #include "bresenham.h"
 #include "font.h"
+#include "hsv_utils.h"
 
 #define RING_DEBUG_PRINT
 #ifdef RING_DEBUG_PRINT
@@ -10,6 +11,15 @@
 #else
     #define ring_printf(...)
 #endif
+
+// LEDs relation to screen
+#define LED_UPPER_LEFT LED_1
+#define LED_UPPER_MID LED_2
+#define LED_UPPER_RIGHT LED_3
+#define LED_LOWER_RIGHT LED_4
+#define LED_LOWER_MID LED_5
+#define LED_LOWER_LEFT LED_6
+
 
 typedef struct
 {
@@ -31,6 +41,22 @@ void ringMsgTxCbFn(p2pInfo* p2p, messageStatus_t status);
 
 void ringUpdateDisplay(void);
 void ringAnimationTimer(void* arg __attribute__((unused)));
+void ICACHE_FLASH_ATTR ringSetLeds(led_t* ledData, uint8_t ledDataLen);
+
+uint8_t ledOrderInd[] = {LED_UPPER_LEFT, LED_LOWER_LEFT, LED_LOWER_MID, LED_LOWER_RIGHT, LED_UPPER_RIGHT, LED_UPPER_MID};
+uint8_t ledCnOrderInd[] = {LED_UPPER_LEFT, LED_LOWER_LEFT, LED_UPPER_MID, LED_LOWER_MID, LED_UPPER_RIGHT, LED_LOWER_RIGHT};
+
+uint8_t ringBrightnessIdx = 2;
+uint8_t indLed;
+static led_t leds[NUM_LIN_LEDS] = {{0}};
+// When using gamma correcton
+static const uint8_t ringBrightnesses[] =
+{
+    0x01,
+    0x02,
+    0x04,
+    0x08,
+};
 
 ringCon_t* ICACHE_FLASH_ATTR getSideConnection(button_mask side);
 ringCon_t* ICACHE_FLASH_ATTR getRingConnection(p2pInfo* p2p);
@@ -369,6 +395,57 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
     {
         plotCircle(20, OLED_HEIGHT / 2, radiusLeft, WHITE);
     }
+    //Clear leds
+    memset(leds, 0, sizeof(leds));
+    //uint32_t colorToShow;
+    //uint8_t ledr;
+    //uint8_t ledg;
+    //uint8_t ledb;
+    //uint8_t ringHue = 52;
+    //uint16_t ringBrightnessRamp = 255;
+
+    // colorToShow = EHSVtoHEXhelper(ringHue, 0xFF, ringBrightnessRamp, false);
+
+    // ledr = (colorToShow >>  0) & 0xFF;
+    // ledg = (colorToShow >>  8) & 0xFF;
+    // ledb = (colorToShow >> 16) & 0xFF;
+    uint8_t i;
+    for(i = 0; i < NUM_CONNECTIONS; i++)
+    {
+        if(connections[i].p2p.cnc.isConnecting)
+        {
+            leds[ledCnOrderInd[2 * i]].r = 255;
+        }
+        else if (connections[i].p2p.cnc.isConnected)
+        {
+            leds[ledCnOrderInd[2 * i]].g = 255;
+        }
+        else if (connections[i].p2p.cnc.broadcastReceived)
+        {
+            leds[ledCnOrderInd[2 * i]].r = 255;
+            leds[ledCnOrderInd[2 * i]].g = 255;
+        }
+
+        if(connections[i].p2p.cnc.otherMacReceived)
+        {
+            leds[ledCnOrderInd[2 * i + 1]].r = 255;
+        }
+        if (connections[i].p2p.cnc.rxGameStartAck)
+        {
+            leds[ledCnOrderInd[2 * i + 1]].g = 255;
+        }
+        if (connections[i].p2p.cnc.rxGameStartMsg)
+        {
+            leds[ledCnOrderInd[2 * i + 1]].b = 255;
+        }
+    }
+
+
+
+
+
+
+    ringSetLeds(leds, sizeof(leds));
 }
 
 void ICACHE_FLASH_ATTR ringAnimationTimer(void* arg __attribute__((unused)))
@@ -381,7 +458,6 @@ void ICACHE_FLASH_ATTR ringAnimationTimer(void* arg __attribute__((unused)))
         {
             radiusLeft = 0;
         }
-
         shouldUpdate = true;
     }
 
@@ -399,4 +475,24 @@ void ICACHE_FLASH_ATTR ringAnimationTimer(void* arg __attribute__((unused)))
     {
         ringUpdateDisplay();
     }
+}
+
+/**
+* Intermediate function which adjusts brightness and sets the LEDs
+*    and applies a brightness ramp
+*
+* @param ledData    The LEDs to be scaled, then gamma corrected, then set
+* @param ledDataLen The length of the LEDs to set
+*/
+void ICACHE_FLASH_ATTR ringSetLeds(led_t* ledData, uint8_t ledDataLen)
+{
+    uint8_t i;
+    led_t ledsAdjusted[NUM_LIN_LEDS];
+    for(i = 0; i < ledDataLen / sizeof(led_t); i++)
+    {
+        ledsAdjusted[i].r = GAMMA_CORRECT(ledData[i].r / ringBrightnesses[ringBrightnessIdx]);
+        ledsAdjusted[i].g = GAMMA_CORRECT(ledData[i].g / ringBrightnesses[ringBrightnessIdx]);
+        ledsAdjusted[i].b = GAMMA_CORRECT(ledData[i].b / ringBrightnesses[ringBrightnessIdx]);
+    }
+    setLeds(ledsAdjusted, ledDataLen);
 }
