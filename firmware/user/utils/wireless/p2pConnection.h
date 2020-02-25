@@ -7,8 +7,8 @@
 typedef enum
 {
     NOT_SET,
-    GOING_SECOND,
-    GOING_FIRST
+    GOING_FIRST,
+    GOING_SECOND
 } playOrder_t;
 
 typedef enum

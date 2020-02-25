@@ -644,7 +644,15 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* mac_addr, uint8_t* data,
             p2p_printf("letting mode handle message\r\n");
             char msgType[4] = {0};
             memcpy(msgType, &data[CMD_IDX], 3 * sizeof(char));
-            p2p->msgRxCbFn(p2p, msgType, &data[EXT_IDX], len - EXT_IDX);
+            if (len > EXT_IDX)
+            {
+                p2p->msgRxCbFn(p2p, msgType, &data[EXT_IDX], len - EXT_IDX);
+            }
+            else
+            {
+                //TODO should this be NULL, for mode_ring param ignore, but for other applications might use
+                p2p->msgRxCbFn(p2p, msgType, NULL, 0);
+            }
         }
     }
 }

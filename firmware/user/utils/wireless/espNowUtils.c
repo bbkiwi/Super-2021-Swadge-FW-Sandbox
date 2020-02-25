@@ -194,11 +194,11 @@ void ICACHE_FLASH_ATTR espNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_t le
             strcat(dbg, tmp);
         }
     }
-    os_printf("[%02X:%02X](%d) %s\r\n",
+    os_printf("[%02X:%02X](%d) %s (%d bytes)\r\n",
               mac_addr[4],
               mac_addr[5],
               rssi,
-              dbg);
+              dbg, len);
 #endif
 
     swadgeModeEspNowRecvCb(mac_addr, data, len, rssi);
