@@ -390,8 +390,11 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
                         connections[i].p2p.cnc.otherMac[5]);
             plotText(6 + 40 * i, 24, macStr, IBM_VGA_8, WHITE);
         }
-        os_snprintf(macStr, sizeof(macStr), " %d", connections[i].p2p.cnc.playOrder);
-        plotText(6 + 40 * i, 36, macStr, IBM_VGA_8, WHITE);
+        if (connections[i].p2p.cnc.playOrder > 0)
+        {
+            os_snprintf(macStr, sizeof(macStr), "p%d", connections[i].p2p.cnc.playOrder);
+            plotText(6 + 40 * i, 36, macStr, IBM_VGA_8, WHITE);
+        }
         if(connections[i].p2p.ack.isWaitingForAck)
         {
             plotText(6 + 40 * i, 48, "ack ?", IBM_VGA_8, WHITE);
@@ -400,21 +403,23 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
 
     if(NULL != getSideConnection(RIGHT))
     {
-        plotRect(OLED_WIDTH - 5, 0, OLED_WIDTH - 1, 5, WHITE);
+        plotText(104, 0, getSideConnection(RIGHT)->lbl, IBM_VGA_8, WHITE);
+        //plotRect(OLED_WIDTH - 5, 0, OLED_WIDTH - 1, 5, WHITE);
     }
 
     if(NULL != getSideConnection(LEFT))
     {
-        plotRect(0, 0, 4, 5, WHITE);
+        plotText(0, 0, getSideConnection(LEFT)->lbl, IBM_VGA_8, WHITE);
+        //plotRect(0, 0, 4, 5, WHITE);
     }
 
     if(radiusRight > 0)
     {
-        plotCircle(OLED_WIDTH - 1 - 20, OLED_HEIGHT / 2, radiusRight, WHITE);
+        plotCircle(128, 0, radiusRight, WHITE);
     }
     if(radiusLeft > 0)
     {
-        plotCircle(20, OLED_HEIGHT / 2, radiusLeft, WHITE);
+        plotCircle(0, 0, radiusLeft, WHITE);
     }
     //Clear leds
     memset(leds, 0, sizeof(leds));
@@ -475,7 +480,7 @@ void ICACHE_FLASH_ATTR ringAnimationTimer(void* arg __attribute__((unused)))
     if(radiusLeft > 0)
     {
         radiusLeft++;
-        if(radiusLeft == 20)
+        if(radiusLeft == 60)
         {
             radiusLeft = 0;
         }
@@ -485,7 +490,7 @@ void ICACHE_FLASH_ATTR ringAnimationTimer(void* arg __attribute__((unused)))
     if(radiusRight > 0)
     {
         radiusRight++;
-        if(radiusRight == 20)
+        if(radiusRight == 60)
         {
             radiusRight = 0;
         }
