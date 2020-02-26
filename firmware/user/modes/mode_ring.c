@@ -373,18 +373,39 @@ void ICACHE_FLASH_ATTR ringMsgTxCbFn(p2pInfo* p2p, messageStatus_t status)
  */
 void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
 {
+    uint8_t i;
+    char macStr[8];
+
     clearDisplay();
 
-    plotText(6, 0, lastMsg, IBM_VGA_8, WHITE);
+    plotText(45, 0, &connections[0].p2p.cnc.macStr[12], IBM_VGA_8, WHITE);
+
+    plotText(6, 12, lastMsg, IBM_VGA_8, WHITE);
+
+    for(i = 0; i < NUM_CONNECTIONS; i++)
+    {
+        if(connections[i].p2p.cnc.otherMacReceived)
+        {
+            os_snprintf(macStr, sizeof(macStr), "%02X:%02X", connections[i].p2p.cnc.otherMac[4],
+                        connections[i].p2p.cnc.otherMac[5]);
+            plotText(6 + 40 * i, 24, macStr, IBM_VGA_8, WHITE);
+        }
+        os_snprintf(macStr, sizeof(macStr), " %d", connections[i].p2p.cnc.playOrder);
+        plotText(6 + 40 * i, 36, macStr, IBM_VGA_8, WHITE);
+        if(connections[i].p2p.ack.isWaitingForAck)
+        {
+            plotText(6 + 40 * i, 48, "ack ?", IBM_VGA_8, WHITE);
+        }
+    }
 
     if(NULL != getSideConnection(RIGHT))
     {
-        plotRect(OLED_WIDTH - 5, 0, OLED_WIDTH - 1, OLED_HEIGHT - 1, WHITE);
+        plotRect(OLED_WIDTH - 5, 0, OLED_WIDTH - 1, 5, WHITE);
     }
 
     if(NULL != getSideConnection(LEFT))
     {
-        plotRect(0, 0, 4, OLED_HEIGHT - 1, WHITE);
+        plotRect(0, 0, 4, 5, WHITE);
     }
 
     if(radiusRight > 0)
@@ -409,7 +430,7 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
     // ledr = (colorToShow >>  0) & 0xFF;
     // ledg = (colorToShow >>  8) & 0xFF;
     // ledb = (colorToShow >> 16) & 0xFF;
-    uint8_t i;
+
     for(i = 0; i < NUM_CONNECTIONS; i++)
     {
         if(connections[i].p2p.cnc.isConnecting)

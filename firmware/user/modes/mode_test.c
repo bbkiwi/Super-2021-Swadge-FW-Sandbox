@@ -307,7 +307,7 @@ void ICACHE_FLASH_ATTR testEnterMode(void)
 
     // Clear everything
     memset(&test, 0, sizeof(test));
-
+    return;
     // Test the buzzer
     uint32_t songLen;
     startBuzzerSong((song_t*)getAsset("carmen.rtl", &songLen), false);
@@ -452,7 +452,7 @@ void ICACHE_FLASH_ATTR testUpdateDisplay(void)
         // Right
         plotCircle(BTN_CTR_X + BTN_OFF, BTN_CTR_Y, BTN_RAD, WHITE);
     }
-
+    return;
     // Draw the banana
     plotSprite(50, 28, &rotating_banana[test.BananaIdx], WHITE);
 
