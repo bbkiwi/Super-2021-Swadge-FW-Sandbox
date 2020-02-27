@@ -313,6 +313,7 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
  * @param payload
  * @param len
  */
+//TODO Here ignore payload, but may for more sophisiticated use may want to include
 void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload __attribute__((unused)), uint8_t len)
 {
     if(0 == strcmp(msg, "tst"))

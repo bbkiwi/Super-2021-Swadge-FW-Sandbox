@@ -325,12 +325,16 @@ void ICACHE_FLASH_ATTR p2pTxAllRetriesTimeout(void* arg)
 
 /**
  * Send a message from one Swadge to another. This must not be called before
- * the CON_ESTABLISHED event occurs. Message addressing, ACKing, and retries
+ * the CON_ESTABLISHED event occurs.
+ * TODO maybe if message is sent before CON_ESTABLISHED have receiving mac
+ *      first take it as a request to connect, then look at actual message
+ * Message addressing, ACKing, and retries
  * all happen automatically
  *
  * @param p2p       The p2pInfo struct with all the state information
  * @param msg       The mandatory three char message type
  * @param payload   An optional message payload string, may be NULL, up to 32 chars
+ * //TODO can 32 chars be extended what is total length of espnow message?
  * @param len       The length of the optional message payload string. May be 0
  * @param msgTxCbFn A callback function when this message is ACKed or dropped
  */
@@ -410,6 +414,7 @@ void ICACHE_FLASH_ATTR p2pModeMsgFailure(void* arg)
 /**
  * Wrapper for sending an ESP-NOW message. Handles ACKing and retries for
  * non-broadcast style messages
+ * TODO What is a broadcast style message
  *
  * @param p2p       The p2pInfo struct with all the state information
  * @param msg       The message to send, may contain destination MAC
@@ -485,6 +490,7 @@ void ICACHE_FLASH_ATTR p2pSendMsgEx(p2pInfo* p2p, char* msg, uint16_t len,
  * @param data     The data
  * @param len      The length of the data
  * @param rssi     The RSSI of th received message, a proxy for distance
+ * TODO fix so actually returns what says on the next line
  * @return false if the message was processed here,
  *         true if the message should be processed by the swadge mode
  */
@@ -516,6 +522,9 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* mac_addr, uint8_t* data,
     }
 
     // If this is anything besides a broadcast, check the other MAC
+    // TODO broadcast is defined by len so implying conMsg xxx_con is only broadcast,
+    //      so could have broadcasts like xxx_yyy but
+    //      not allowing broadcast with more data
     if(p2p->cnc.otherMacReceived &&
             len > ets_strlen(p2p->conMsg) &&
             0 != ets_memcmp(mac_addr, p2p->cnc.otherMac, sizeof(p2p->cnc.otherMac)))
@@ -530,6 +539,24 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* mac_addr, uint8_t* data,
     if(len >= SEQ_IDX &&
             0 != ets_memcmp(data, p2p->ackMsg, SEQ_IDX))
     {
+        //TODO Maybe here check if we are actually connected and if not
+        //     Could be receiving str message which is ok
+        //     as maybe we were turned off then on
+        // Seems maybe connect if isConnected is false and isConnecting is false
+        //     first connect. We
+        p2p_printf("%s BEFORE ACK\n", p2p->cnc.isConnected ? "CONNECTED" : "NOT CONNECTED");
+        p2p_printf("     Sender %s [%02X:%02X]\n", p2p->msgId, mac_addr[4], mac_addr[5]);
+        p2p_printf("     isConnecting %s\n", p2p->cnc.isConnecting ? "TRUE" : "FALSE");
+        p2p_printf("     broadcastReceived %s\n", p2p->cnc.broadcastReceived ? "TRUE" : "FALSE");
+        p2p_printf("     rxGameStartMsg %s\n", p2p->cnc.rxGameStartMsg ? "TRUE" : "FALSE");
+        p2p_printf("     rxGameStartAck %s\n", p2p->cnc.rxGameStartAck ? "TRUE" : "FALSE");
+        p2p_printf("     playOrder %d\n", p2p->cnc.playOrder);
+        p2p_printf("     macStr %s\n", p2p->cnc.macStr);
+        p2p_printf("     %s [%02X:%02X]\n",
+                   p2p->cnc.otherMacReceived ? "OTHER MAC RECEIVED " : "NO OTHER MAC RECEIVED ",
+                   p2p->cnc.otherMac[4],
+                   p2p->cnc.otherMac[5]);
+        p2p_printf("     mySeqNum = %d, lastSeqNum = %d\n", p2p->cnc.mySeqNum, p2p->cnc.lastSeqNum);
         p2pSendAckToMac(p2p, mac_addr);
     }
 
@@ -650,7 +677,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* mac_addr, uint8_t* data,
             }
             else
             {
-                //TODO should this be NULL, for mode_ring param ignore, but for other applications might use
+                //TODO should this be NULL, for mode_ring param ignored, but for other applications might use
                 p2p->msgRxCbFn(p2p, msgType, NULL, 0);
             }
         }
