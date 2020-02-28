@@ -557,6 +557,38 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* mac_addr, uint8_t* data,
                    p2p->cnc.otherMac[4],
                    p2p->cnc.otherMac[5]);
         p2p_printf("     mySeqNum = %d, lastSeqNum = %d\n", p2p->cnc.mySeqNum, p2p->cnc.lastSeqNum);
+
+        if (p2p->cnc.isConnecting == false && p2p->cnc.isConnected == false)
+        {
+            // Repair connection
+            p2p->cnc.isConnected = true;
+            p2p->cnc.isConnecting = false;
+            p2p->cnc.broadcastReceived = true;
+            p2p->cnc.rxGameStartAck = true;
+            p2p->cnc.rxGameStartMsg = true;
+            p2p->cnc.otherMacReceived = true;
+            p2p->cnc.mySeqNum = 0;
+            p2p->cnc.lastSeqNum = 255;
+            uint8_t i;
+            for (i = 0; i < 6; i++)
+            {
+                p2p->cnc.otherMac[i] = mac_addr[i];
+            }
+
+            p2p_printf("%s REPAIRED \n", p2p->cnc.isConnected ? "CONNECTED" : "NOT CONNECTED");
+            p2p_printf("     Sender %s [%02X:%02X]\n", p2p->msgId, mac_addr[4], mac_addr[5]);
+            p2p_printf("     isConnecting %s\n", p2p->cnc.isConnecting ? "TRUE" : "FALSE");
+            p2p_printf("     broadcastReceived %s\n", p2p->cnc.broadcastReceived ? "TRUE" : "FALSE");
+            p2p_printf("     rxGameStartMsg %s\n", p2p->cnc.rxGameStartMsg ? "TRUE" : "FALSE");
+            p2p_printf("     rxGameStartAck %s\n", p2p->cnc.rxGameStartAck ? "TRUE" : "FALSE");
+            p2p_printf("     playOrder %d\n", p2p->cnc.playOrder);
+            p2p_printf("     macStr %s\n", p2p->cnc.macStr);
+            p2p_printf("     %s [%02X:%02X]\n",
+                       p2p->cnc.otherMacReceived ? "OTHER MAC RECEIVED " : "NO OTHER MAC RECEIVED ",
+                       p2p->cnc.otherMac[4],
+                       p2p->cnc.otherMac[5]);
+            p2p_printf("     mySeqNum = %d, lastSeqNum = %d\n", p2p->cnc.mySeqNum, p2p->cnc.lastSeqNum);
+        }
         p2pSendAckToMac(p2p, mac_addr);
     }
 
