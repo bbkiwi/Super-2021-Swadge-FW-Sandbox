@@ -1,3 +1,5 @@
+//TODO change 0xFF to 0x09 to indicate no side allocated as prints a 1d
+
 #include "mode_ring.h"
 #include "p2pConnection.h"
 #include "buttons.h"
@@ -5,7 +7,7 @@
 #include "font.h"
 #include "hsv_utils.h"
 
-#define RING_DEBUG_PRINT
+//#define RING_DEBUG_PRINT
 #ifdef RING_DEBUG_PRINT
     #define ring_printf(...) os_printf(__VA_ARGS__)
 #else
@@ -90,7 +92,7 @@ ringCon_t* ICACHE_FLASH_ATTR getSideConnection(button_mask side)
     uint8_t i;
     for(i = 0; i < NUM_CONNECTIONS; i++)
     {
-        if(side == connections[i].side)
+        if(side == connections[i].p2p.side)
         {
             return &connections[i];
         }
@@ -126,14 +128,20 @@ void ICACHE_FLASH_ATTR ringEnterMode(void)
     uint8_t i;
     for(i = 0; i < NUM_CONNECTIONS; i++)
     {
-        connections[i].side = 0xFF;
         p2pInitialize(&connections[i].p2p, connections[i].lbl, ringConCbFn, ringMsgRxCbFn, 0);
+        // Doesn't work if here! Had to put in p2pInialize
+        //connections[i].p2p.side = 0x09;
     }
 
     os_timer_setfn(&animationTimer, ringAnimationTimer, NULL);
     os_timer_arm(&animationTimer, 50, true);
 
     ringUpdateDisplay();
+    for(i = 0; i < NUM_CONNECTIONS; i++)
+    {
+        ring_printf("i = %d, side = %d", i, connections[i].p2p.side);
+    }
+    ring_printf("\n");
 }
 
 /**
@@ -180,16 +188,26 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
                     uint8_t i;
                     for(i = 0; i < NUM_CONNECTIONS; i++)
                     {
-                        if(0xFF == connections[i].side)
+                        //ring_printf("i = %d, side = %d", i, connections[i].p2p.side);
+                        if(0x09 == connections[i].p2p.side)
                         {
                             p2pStartConnection(&(connections[i].p2p));
                         }
                     }
+                    //ring_printf("\n");
                 }
                 else
                 {
                     // Otherwise send a message
-                    p2pSendMsg(&(getSideConnection(side)->p2p), "tst", "Tst Msg", sizeof("Tst Msg"), ringMsgTxCbFn);
+                    //char testMsg[256] = {0};
+                    //char tmp[8] = {0};
+                    //int i;
+                    //ets_sprintf(testMsg, "side=%d otherSide=%d", side, getSideConnection(side)->p2p.cnc.otherSide);
+                    //strcat(dbg, tmp);
+                    //p2pSendMsg(&(getSideConnection(side)->p2p), "tst", testMsg, sizeof(testMsg),
+                    //           ringMsgTxCbFn);
+                    p2pSendMsg(&(getSideConnection(side)->p2p), "tst", "Tst Msg Could Be Long", sizeof("Tst Msg Could Be Long"),
+                               ringMsgTxCbFn);
                 }
                 break;
             }
@@ -251,7 +269,7 @@ void ICACHE_FLASH_ATTR ringAccelerometerCallback(accel_t* accel __attribute__((u
  */
 void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
 {
-    char* conStr = getRingConnection(p2p)->lbl;
+    char* conStr = getRingConnection(p2p)->p2p.msgId;
 
     switch(evt)
     {
@@ -284,13 +302,23 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
         }
         case CON_ESTABLISHED:
         {
-            getRingConnection(p2p)->side = connectionSide;
-            os_snprintf(lastMsg, sizeof(lastMsg), "%s: CON_ESTABLISHED\n", conStr);
+            for(uint8_t i = 0; i < NUM_CONNECTIONS; i++)
+            {
+                ring_printf("i = %d, side = %d", i, connections[i].p2p.side);
+            }
+            ring_printf("\n");
+            getRingConnection(p2p)->p2p.side = connectionSide;
+            os_snprintf(lastMsg, sizeof(lastMsg), "%s: CON_ESTABLISHED on side %d\n", conStr, connectionSide);
+            for(uint8_t i = 0; i < NUM_CONNECTIONS; i++)
+            {
+                ring_printf("i = %d, side = %d", i, connections[i].p2p.side);
+            }
+            ring_printf("\n");
             break;
         }
         case CON_LOST:
         {
-            getRingConnection(p2p)->side = 0xFF;
+            getRingConnection(p2p)->p2p.side = 0x09;
             os_snprintf(lastMsg, sizeof(lastMsg), "%s: CON_LOST\n", conStr);
             break;
         }
@@ -318,17 +346,17 @@ void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload _
 {
     if(0 == strcmp(msg, "tst"))
     {
-        if(RIGHT == getRingConnection(p2p)->side)
+        if(RIGHT == getRingConnection(p2p)->p2p.side)
         {
             radiusRight = 1;
         }
-        else if(LEFT == getRingConnection(p2p)->side)
+        else if(LEFT == getRingConnection(p2p)->p2p.side)
         {
             radiusLeft = 1;
         }
     }
 
-    os_snprintf(lastMsg, sizeof(lastMsg), "Received %d bytes from %s\n", len, getRingConnection(p2p)->lbl);
+    os_snprintf(lastMsg, sizeof(lastMsg), "Received %d bytes from %s\n", len, getRingConnection(p2p)->p2p.msgId);
     ring_printf("%s", lastMsg);
     ringUpdateDisplay();
     return;
@@ -342,7 +370,7 @@ void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload _
  */
 void ICACHE_FLASH_ATTR ringMsgTxCbFn(p2pInfo* p2p, messageStatus_t status)
 {
-    char* conStr = getRingConnection(p2p)->lbl;
+    char* conStr = getRingConnection(p2p)->p2p.msgId;
 
     switch(status)
     {
@@ -354,7 +382,7 @@ void ICACHE_FLASH_ATTR ringMsgTxCbFn(p2pInfo* p2p, messageStatus_t status)
         case MSG_FAILED:
         {
             os_snprintf(lastMsg, sizeof(lastMsg), "%s: MSG_FAILED\n", conStr);
-            getRingConnection(p2p)->side = 0xFF;
+            getRingConnection(p2p)->p2p.side = 0x09;
             break;
         }
         default:
@@ -404,13 +432,13 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
 
     if(NULL != getSideConnection(RIGHT))
     {
-        plotText(104, 0, getSideConnection(RIGHT)->lbl, IBM_VGA_8, WHITE);
+        plotText(104, 0, getSideConnection(RIGHT)->p2p.msgId, IBM_VGA_8, WHITE);
         //plotRect(OLED_WIDTH - 5, 0, OLED_WIDTH - 1, 5, WHITE);
     }
 
     if(NULL != getSideConnection(LEFT))
     {
-        plotText(0, 0, getSideConnection(LEFT)->lbl, IBM_VGA_8, WHITE);
+        plotText(0, 0, getSideConnection(LEFT)->p2p.msgId, IBM_VGA_8, WHITE);
         //plotRect(0, 0, 4, 5, WHITE);
     }
 

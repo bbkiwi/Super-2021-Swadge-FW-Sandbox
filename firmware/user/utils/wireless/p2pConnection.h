@@ -3,6 +3,7 @@
 
 #include <osapi.h>
 #include "user_main.h"
+#include "buttons.h"
 
 typedef enum
 {
@@ -42,6 +43,7 @@ typedef struct _p2pInfo
     char conMsg[8];
     char ackMsg[32];
     char startMsg[32];
+    button_mask side;
 
     // Callback function pointers
     p2pConCbFn conCbFn;
@@ -72,6 +74,7 @@ typedef struct _p2pInfo
         playOrder_t playOrder;
         char macStr[18];
         uint8_t otherMac[6];
+        button_mask otherSide;
         bool otherMacReceived;
         uint8_t mySeqNum;
         uint8_t lastSeqNum;
