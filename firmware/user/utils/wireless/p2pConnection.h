@@ -40,7 +40,7 @@ typedef struct _p2pInfo
 {
     // Messages that every mode uses
     char msgId[4];
-    char conMsg[8];
+    char conMsg[10];
     char ackMsg[32];
     char startMsg[32];
     button_mask side;

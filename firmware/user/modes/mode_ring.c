@@ -191,6 +191,7 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
                         //ring_printf("i = %d, side = %d", i, connections[i].p2p.side);
                         if(0x09 == connections[i].p2p.side)
                         {
+                            connections[i].p2p.side = connectionSide;
                             p2pStartConnection(&(connections[i].p2p));
                         }
                     }
