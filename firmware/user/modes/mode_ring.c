@@ -1,5 +1,3 @@
-//TODO change 0xFF to 0x09 to indicate no side allocated as prints a 1d
-
 #include "mode_ring.h"
 #include "p2pConnection.h"
 #include "buttons.h"
@@ -30,19 +28,19 @@ typedef struct
     char lbl[4];
 } ringCon_t;
 
-void ringEnterMode(void);
-void ringExitMode(void);
-void ringButtonCallback(uint8_t state, int button, int down);
-void ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_t len, uint8_t rssi);
-void ringEspNowSendCb(uint8_t* mac_addr, mt_tx_status status);
-void ringAccelerometerCallback(accel_t* accel);
+void ICACHE_FLASH_ATTR ringEnterMode(void);
+void ICACHE_FLASH_ATTR ringExitMode(void);
+void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state, int button, int down);
+void ICACHE_FLASH_ATTR ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_t len, uint8_t rssi);
+void ICACHE_FLASH_ATTR ringEspNowSendCb(uint8_t* mac_addr, mt_tx_status status);
+void ICACHE_FLASH_ATTR ringAccelerometerCallback(accel_t* accel);
 
-void ringConCbFn(p2pInfo* p2p, connectionEvt_t);
-void ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, uint8_t len);
-void ringMsgTxCbFn(p2pInfo* p2p, messageStatus_t status);
+void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t);
+void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, uint8_t len);
+void ICACHE_FLASH_ATTR ringMsgTxCbFn(p2pInfo* p2p, messageStatus_t status);
 
-void ringUpdateDisplay(void);
-void ringAnimationTimer(void* arg __attribute__((unused)));
+void ICACHE_FLASH_ATTR ringUpdateDisplay(void);
+void ICACHE_FLASH_ATTR ringAnimationTimer(void* arg __attribute__((unused)));
 void ICACHE_FLASH_ATTR ringSetLeds(led_t* ledData, uint8_t ledDataLen);
 
 uint8_t ledOrderInd[] = {LED_UPPER_LEFT, LED_LOWER_LEFT, LED_LOWER_MID, LED_LOWER_RIGHT, LED_UPPER_RIGHT, LED_UPPER_MID};
@@ -86,6 +84,8 @@ char lastMsg[256];
 os_timer_t animationTimer;
 uint8_t radiusLeft = 0;
 uint8_t radiusRight = 0;
+uint8_t ringHueRight;
+uint8_t ringHueLeft;
 
 ringCon_t* ICACHE_FLASH_ATTR getSideConnection(button_mask side)
 {
@@ -130,7 +130,7 @@ void ICACHE_FLASH_ATTR ringEnterMode(void)
     {
         p2pInitialize(&connections[i].p2p, connections[i].lbl, ringConCbFn, ringMsgRxCbFn, 0);
         // Doesn't work if here! Had to put in p2pInialize
-        //connections[i].p2p.side = 0x09;
+        //connections[i].p2p.side = 0x0F;
     }
 
     os_timer_setfn(&animationTimer, ringAnimationTimer, NULL);
@@ -189,7 +189,7 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
                     for(i = 0; i < NUM_CONNECTIONS; i++)
                     {
                         //ring_printf("i = %d, side = %d", i, connections[i].p2p.side);
-                        if(0x09 == connections[i].p2p.side)
+                        if(0x0F == connections[i].p2p.side)
                         {
                             connections[i].p2p.side = connectionSide;
                             p2pStartConnection(&(connections[i].p2p));
@@ -199,15 +199,22 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
                 }
                 else
                 {
-                    // Otherwise send a message
-                    //char testMsg[256] = {0};
-                    //char tmp[8] = {0};
-                    //int i;
-                    //ets_sprintf(testMsg, "side=%d otherSide=%d", side, getSideConnection(side)->p2p.cnc.otherSide);
-                    //strcat(dbg, tmp);
-                    //p2pSendMsg(&(getSideConnection(side)->p2p), "tst", testMsg, sizeof(testMsg),
-                    //           ringMsgTxCbFn);
-                    p2pSendMsg(&(getSideConnection(side)->p2p), "tst", "Tst Msg Could Be Long", sizeof("Tst Msg Could Be Long"),
+                    // Light led with random hue on correct side
+                    uint8_t randomHue = os_random();
+                    if (side == LEFT)
+                    {
+                        radiusLeft = 1;
+                        ringHueLeft = randomHue;
+                    }
+                    else
+                    {
+                        radiusRight = 1;
+                        ringHueRight = randomHue;
+                    }
+                    // Send a message with hue
+                    char testMsg[256] = {0};
+                    ets_sprintf(testMsg, "%02X is the hue", randomHue);
+                    p2pSendMsg(&(getSideConnection(side)->p2p), "tst", testMsg, sizeof(testMsg),
                                ringMsgTxCbFn);
                 }
                 break;
@@ -319,7 +326,7 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
         }
         case CON_LOST:
         {
-            getRingConnection(p2p)->p2p.side = 0x09;
+            getRingConnection(p2p)->p2p.side = 0x0F;
             os_snprintf(lastMsg, sizeof(lastMsg), "%s: CON_LOST\n", conStr);
             break;
         }
@@ -343,17 +350,21 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
  * @param len
  */
 //TODO Here ignore payload, but may for more sophisiticated use may want to include
-void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload __attribute__((unused)), uint8_t len)
+void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, uint8_t len)
 {
     if(0 == strcmp(msg, "tst"))
     {
         if(RIGHT == getRingConnection(p2p)->p2p.side)
         {
             radiusRight = 1;
+            ringHueRight = p2pHex2Int(payload[3]) * 16 + p2pHex2Int(payload[4]);
+            os_printf("ringHueRight = %d\n", ringHueRight);
         }
         else if(LEFT == getRingConnection(p2p)->p2p.side)
         {
             radiusLeft = 1;
+            ringHueLeft = p2pHex2Int(payload[3]) * 16 + p2pHex2Int(payload[4]);
+            os_printf("ringHueLeft = %d\n", ringHueLeft);
         }
     }
 
@@ -383,7 +394,7 @@ void ICACHE_FLASH_ATTR ringMsgTxCbFn(p2pInfo* p2p, messageStatus_t status)
         case MSG_FAILED:
         {
             os_snprintf(lastMsg, sizeof(lastMsg), "%s: MSG_FAILED\n", conStr);
-            getRingConnection(p2p)->p2p.side = 0x09;
+            getRingConnection(p2p)->p2p.side = 0x0F;
             break;
         }
         default:
@@ -405,7 +416,7 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
 {
     uint8_t i;
     char macStr[8];
-
+    uint32_t colorToShow;
     clearDisplay();
 
     plotText(45, 0, &connections[0].p2p.cnc.macStr[12], IBM_VGA_8, WHITE);
@@ -443,64 +454,59 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
         //plotRect(0, 0, 4, 5, WHITE);
     }
 
+    //Clear leds
+    memset(leds, 0, sizeof(leds));
+
     if(radiusRight > 0)
     {
-        plotCircle(128, 0, radiusRight, WHITE);
+        plotCircle(127, 63, radiusRight, WHITE);
+        colorToShow = EHSVtoHEXhelper(ringHueRight, 0xFF, 6 * (10 + radiusRight), false);
+        leds[LED_LOWER_RIGHT].r =  (colorToShow >>  0) & 0xFF;
+        leds[LED_LOWER_RIGHT].g =  (colorToShow >>  8) & 0xFF;
+        leds[LED_LOWER_RIGHT].b =  (colorToShow >>  16) & 0xFF;
     }
     if(radiusLeft > 0)
     {
-        plotCircle(0, 0, radiusLeft, WHITE);
+        plotCircle(0, 63, radiusLeft, WHITE);
+        colorToShow = EHSVtoHEXhelper(ringHueLeft, 0xFF, 6 * (10 + radiusLeft), false);
+        leds[LED_LOWER_LEFT].r =  (colorToShow >>  0) & 0xFF;
+        leds[LED_LOWER_LEFT].g =  (colorToShow >>  8) & 0xFF;
+        leds[LED_LOWER_LEFT].b =  (colorToShow >>  16) & 0xFF;
     }
-    //Clear leds
-    memset(leds, 0, sizeof(leds));
-    //uint32_t colorToShow;
-    //uint8_t ledr;
-    //uint8_t ledg;
-    //uint8_t ledb;
-    //uint8_t ringHue = 52;
-    //uint16_t ringBrightnessRamp = 255;
 
-    // colorToShow = EHSVtoHEXhelper(ringHue, 0xFF, ringBrightnessRamp, false);
-
-    // ledr = (colorToShow >>  0) & 0xFF;
-    // ledg = (colorToShow >>  8) & 0xFF;
-    // ledb = (colorToShow >> 16) & 0xFF;
-
-    for(i = 0; i < NUM_CONNECTIONS; i++)
+    if (radiusLeft == 0 && radiusRight == 0)
     {
-        if(connections[i].p2p.cnc.isConnecting)
-        {
-            leds[ledCnOrderInd[2 * i]].r = 255;
-        }
-        else if (connections[i].p2p.cnc.isConnected)
-        {
-            leds[ledCnOrderInd[2 * i]].g = 255;
-        }
-        else if (connections[i].p2p.cnc.broadcastReceived)
-        {
-            leds[ledCnOrderInd[2 * i]].r = 255;
-            leds[ledCnOrderInd[2 * i]].g = 255;
-        }
 
-        if(connections[i].p2p.cnc.otherMacReceived)
+        for(i = 0; i < NUM_CONNECTIONS; i++)
         {
-            leds[ledCnOrderInd[2 * i + 1]].r = 255;
-        }
-        if (connections[i].p2p.cnc.rxGameStartAck)
-        {
-            leds[ledCnOrderInd[2 * i + 1]].g = 255;
-        }
-        if (connections[i].p2p.cnc.rxGameStartMsg)
-        {
-            leds[ledCnOrderInd[2 * i + 1]].b = 255;
+            if(connections[i].p2p.cnc.isConnecting)
+            {
+                leds[ledCnOrderInd[2 * i]].r = 255;
+            }
+            else if (connections[i].p2p.cnc.isConnected)
+            {
+                leds[ledCnOrderInd[2 * i]].g = 255;
+            }
+            else if (connections[i].p2p.cnc.broadcastReceived)
+            {
+                leds[ledCnOrderInd[2 * i]].r = 255;
+                leds[ledCnOrderInd[2 * i]].g = 255;
+            }
+
+            if(connections[i].p2p.cnc.otherMacReceived)
+            {
+                leds[ledCnOrderInd[2 * i + 1]].r = 255;
+            }
+            if (connections[i].p2p.cnc.rxGameStartAck)
+            {
+                leds[ledCnOrderInd[2 * i + 1]].g = 255;
+            }
+            if (connections[i].p2p.cnc.rxGameStartMsg)
+            {
+                leds[ledCnOrderInd[2 * i + 1]].b = 255;
+            }
         }
     }
-
-
-
-
-
-
     ringSetLeds(leds, sizeof(leds));
 }
 
@@ -510,7 +516,7 @@ void ICACHE_FLASH_ATTR ringAnimationTimer(void* arg __attribute__((unused)))
     if(radiusLeft > 0)
     {
         radiusLeft++;
-        if(radiusLeft == 60)
+        if(radiusLeft == 30)
         {
             radiusLeft = 0;
         }
@@ -520,7 +526,7 @@ void ICACHE_FLASH_ATTR ringAnimationTimer(void* arg __attribute__((unused)))
     if(radiusRight > 0)
     {
         radiusRight++;
-        if(radiusRight == 60)
+        if(radiusRight == 30)
         {
             radiusRight = 0;
         }
