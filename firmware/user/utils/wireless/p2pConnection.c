@@ -1,5 +1,5 @@
 //TODO not working when P2P_DEBUG_PRINT timing?
-
+// Change to test for con broadcast look for msg con rather than length of message
 /* PlantUML documentation
 
 == Connection ==
@@ -126,7 +126,7 @@ void ICACHE_FLASH_ATTR p2pInitialize(p2pInfo* p2p, char* msgId,
                                      p2pConCbFn conCbFn,
                                      p2pMsgRxCbFn msgRxCbFn, uint8_t connectionRssi)
 {
-    p2p_printf("%s\r\n", __func__);
+    p2p_printf("%s %s\r\n", __func__, msgId);
     // Make sure everything is zero!
     ets_memset(p2p, 0, sizeof(p2pInfo));
     p2p->side = 0x0F;
@@ -212,7 +212,7 @@ void ICACHE_FLASH_ATTR p2pInitialize(p2pInfo* p2p, char* msgId,
  */
 void ICACHE_FLASH_ATTR p2pStartConnection(p2pInfo* p2p)
 {
-    p2p_printf("%s\r\n", __func__);
+    p2p_printf("%s %s\r\n", __func__, p2p->msgId);
     p2p->cnc.isConnecting = true;
     os_timer_arm(&p2p->tmr.Connection, 1, false);
 
@@ -232,7 +232,7 @@ void ICACHE_FLASH_ATTR p2pStopConnection(p2pInfo* p2p)
 {
     if(true == p2p->cnc.isConnecting)
     {
-        p2p_printf("%s\r\n", __func__);
+        p2p_printf("%s %s\r\n", __func__, p2p->msgId);
         p2p->cnc.isConnecting = false;
         os_timer_disarm(&p2p->tmr.Connection);
 
@@ -252,8 +252,7 @@ void ICACHE_FLASH_ATTR p2pStopConnection(p2pInfo* p2p)
  */
 void ICACHE_FLASH_ATTR p2pDeinit(p2pInfo* p2p)
 {
-    p2p_printf("%s\r\n", __func__);
-
+    p2p_printf("%s %s\r\n", __func__, p2p->msgId);
     os_timer_disarm(&p2p->tmr.Connection);
     os_timer_disarm(&p2p->tmr.TxRetry);
     os_timer_disarm(&p2p->tmr.Reinit);
@@ -282,7 +281,7 @@ void ICACHE_FLASH_ATTR p2pConnectionTimeout(void* arg)
     uint32_t timeoutMs = 100 * (5 + (os_random() % 11));
 
     // Start the timer again
-    p2p_printf("retry broadcast in %dms\r\n", timeoutMs);
+    p2p_printf("%s retry broadcast in %dms\r\n", p2p->msgId, timeoutMs);
     os_timer_arm(&p2p->tmr.Connection, timeoutMs, false);
 }
 
@@ -296,9 +295,8 @@ void ICACHE_FLASH_ATTR p2pConnectionTimeout(void* arg)
  */
 void ICACHE_FLASH_ATTR p2pTxRetryTimeout(void* arg)
 {
-    p2p_printf("%s\r\n", __func__);
-
     p2pInfo* p2p = (p2pInfo*)arg;
+    p2p_printf("%s %s\r\n", __func__, p2p->msgId);
 
     if(p2p->ack.msgToAckLen > 0)
     {
@@ -318,10 +316,8 @@ void ICACHE_FLASH_ATTR p2pTxRetryTimeout(void* arg)
  */
 void ICACHE_FLASH_ATTR p2pTxAllRetriesTimeout(void* arg)
 {
-    p2p_printf("%s\r\n", __func__);
-
     p2pInfo* p2p = (p2pInfo*)arg;
-
+    p2p_printf("%s %s\r\n", __func__, p2p->msgId);
     // Disarm all timers
     os_timer_disarm(&p2p->tmr.TxRetry);
     os_timer_disarm(&p2p->tmr.TxAllRetries);
@@ -355,8 +351,7 @@ void ICACHE_FLASH_ATTR p2pTxAllRetriesTimeout(void* arg)
 void ICACHE_FLASH_ATTR p2pSendMsg(p2pInfo* p2p, char* msg, char* payload,
                                   uint16_t len, p2pMsgTxCbFn msgTxCbFn)
 {
-    p2p_printf("%s\r\n", __func__);
-
+    p2p_printf("%s %s\r\n", __func__, p2p->msgId);
     char builtMsg[64] = {0};
 
     if(NULL == payload || len == 0)
@@ -403,9 +398,8 @@ void ICACHE_FLASH_ATTR p2pSendMsg(p2pInfo* p2p, char* msg, char* payload,
  */
 void ICACHE_FLASH_ATTR p2pModeMsgSuccess(void* arg)
 {
-    p2p_printf("%s\r\n", __func__);
-
     p2pInfo* p2p = (p2pInfo*)arg;
+    p2p_printf("%s %s\r\n", __func__, p2p->msgId);
     if(NULL != p2p->msgTxCbFn)
     {
         p2p->msgTxCbFn(p2p, MSG_ACKED);
@@ -420,9 +414,8 @@ void ICACHE_FLASH_ATTR p2pModeMsgSuccess(void* arg)
  */
 void ICACHE_FLASH_ATTR p2pModeMsgFailure(void* arg)
 {
-    p2p_printf("%s\r\n", __func__);
-
     p2pInfo* p2p = (p2pInfo*)arg;
+    p2p_printf("%s %s\r\n", __func__, p2p->msgId);
     if(NULL != p2p->msgTxCbFn)
     {
         p2p->msgTxCbFn(p2p, MSG_FAILED);
@@ -444,8 +437,7 @@ void ICACHE_FLASH_ATTR p2pModeMsgFailure(void* arg)
 void ICACHE_FLASH_ATTR p2pSendMsgEx(p2pInfo* p2p, char* msg, uint16_t len,
                                     bool shouldAck, void (*success)(void*), void (*failure)(void*))
 {
-    p2p_printf("%s\r\n", __func__);
-
+    p2p_printf("%s %s\r\n", __func__, p2p->msgId);
     // If this is a first time message and longer than a connection message
     if( (p2p->ack.msgToAck != msg) && ets_strlen(p2p->conMsg) < len)
     {
@@ -531,19 +523,19 @@ button_mask ICACHE_FLASH_ATTR  p2pHex2Int(uint8_t in)
  */
 void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* mac_addr, uint8_t* data, uint8_t len, uint8_t rssi)
 {
-#ifdef P2P_DEBUG_PRINT
-    char* dbgMsg = (char*)os_zalloc(sizeof(char) * (len + 1));
-    ets_memcpy(dbgMsg, data, len);
-    p2p_printf("%s: %s\r\n", __func__, dbgMsg);
-    os_free(dbgMsg);
-#endif
+// #ifdef P2P_DEBUG_PRINT
+//     char* dbgMsg = (char*)os_zalloc(sizeof(char) * (len + 1));
+//     ets_memcpy(dbgMsg, data, len);
+//     p2p_printf("%s %s: %s\r\n", __func__, p2p->msgId, dbgMsg);
+//     os_free(dbgMsg);
+// #endif
 
     // Check if this message matches our message ID
     if(len < CMD_IDX ||
             (0 != ets_memcmp(data, p2p->conMsg, CMD_IDX)))
     {
         // This message is too short, or does not match our message ID
-        p2p_printf("DISCARD: Not a message for '%s'\r\n", p2p->msgId);
+        //p2p_printf("DISCARD: Not a message for '%s'\r\n", p2p->msgId);
         return;
     }
 
@@ -552,28 +544,29 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* mac_addr, uint8_t* data,
             0 != ets_memcmp(&data[MAC_IDX], p2p->cnc.macStr, ets_strlen(p2p->cnc.macStr)))
     {
         // This MAC isn't for us
-        p2p_printf("DISCARD: Not for our MAC\r\n");
+        //p2p_printf("DISCARD: Not for our MAC\r\n");
         return;
     }
 
-    // If this is anything besides a broadcast, check the other MAC
-    // TODO broadcast is defined by len so implying conMsg xxx_con_n is still shorter than other messages so test works for is only broadcast,
-    //      so could have broadcasts like xxx_yyy but
-    //      not allowing broadcast with more data
+    // If this is anything besides a con broadcast, check the other MAC
     if(p2p->cnc.otherMacReceived &&
-            len > ets_strlen(p2p->conMsg) &&
+            0 != ets_memcmp(data, p2p->conMsg, SEQ_IDX) &&
             0 != ets_memcmp(mac_addr, p2p->cnc.otherMac, sizeof(p2p->cnc.otherMac)))
     {
-        // This isn't from the other known swadge
-        p2p_printf("DISCARD: Not from the other MAC\r\n");
+        // This directed message not from the other known swadge
+        //p2p_printf("DISCARD: Not from the other MAC\r\n");
         return;
     }
+
+#ifdef P2P_DEBUG_PRINT
+    char* dbgMsg = (char*)os_zalloc(sizeof(char) * (len + 1));
+    ets_memcpy(dbgMsg, data, len);
+    p2p_printf("%s %s: %s\r\n", __func__, p2p->msgId, dbgMsg);
+    os_free(dbgMsg);
+#endif
 
     // By here, we know the received message matches our message ID, either a
     // connection request broadcast or for us. If for us and not an ack message, ack it
-    // TODO lenth of con is 9 so need add 2
-    //if(len >= SEQ_IDX+2 &&
-    //TODO this might be better
     if(0 != ets_memcmp(data, p2p->conMsg, SEQ_IDX) &&
             0 != ets_memcmp(data, p2p->ackMsg, SEQ_IDX))
     {
@@ -696,6 +689,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* mac_addr, uint8_t* data,
     {
         if(true == p2p->cnc.isConnecting)
         {
+            // TODO if broadcast for the other
             // Received another broadcast, Check if this RSSI is strong enough
             if(!p2p->cnc.broadcastReceived &&
                     rssi > p2p->connectionRssi &&
@@ -754,8 +748,46 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* mac_addr, uint8_t* data,
         }
         return;
     }
-    else
+    else // (thinks) it's connected
     {
+        // Look for con broadcast coming from the otherMac on otherSide
+        if(0 == ets_memcmp(data, p2p->conMsg, SEQ_IDX)
+                && 0 == ets_memcmp(mac_addr, p2p->cnc.otherMac, sizeof(p2p->cnc.otherMac))
+                && p2p->cnc.otherSide == p2pHex2Int(data[EXT_IDX + 0]))
+        {
+            p2p_printf("Re connect from con broadcast %s from otherMac on side %d %d\r\n", p2p->conMsg, p2p->cnc.otherSide,
+                       p2pHex2Int(data[EXT_IDX + 0]));
+            // This is a con broadcast from p2p->cnc.otherMac (maybe because it was turned off then on and button pushed)
+            // reponds automatically to it to reestablish connection
+            // We received a broadcast, don't allow another
+            p2pRestart(p2p);
+            p2p->cnc.otherSide = p2pHex2Int(data[EXT_IDX + 0]);
+            p2p->side = p2pHex2Int(data[EXT_IDX + 0] == 2 ? 4 : 2);
+            p2pStartConnection(p2p);
+            return;
+            p2p->cnc.broadcastReceived = true;
+            p2pProcConnectionEvt(p2p, CON_ESTABLISHED);
+            // Send a message to other to complete the connection.
+            ets_snprintf(p2p->startMsg, sizeof(p2p->startMsg), p2pNoPayloadMsgFmt,
+                         p2p->msgId,
+                         "str",
+                         0,
+                         mac_addr[0],
+                         mac_addr[1],
+                         mac_addr[2],
+                         mac_addr[3],
+                         mac_addr[4],
+                         mac_addr[5],
+                         //TODO check reverse ok?
+                         p2p->cnc.otherSide,
+                         p2p->side
+                        );
+
+            // If it's acked, call p2pGameStartAckRecv(), if not reinit with p2pRestart()
+            p2pSendMsgEx(p2p, p2p->startMsg, ets_strlen(p2p->startMsg), true, p2pGameStartAckRecv, p2pRestart);
+        }
+
+
         p2p_printf("cnc.isconnected is true\r\n");
         // Let the mode handle it
         if(NULL != p2p->msgRxCbFn)
@@ -784,8 +816,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* mac_addr, uint8_t* data,
  */
 void ICACHE_FLASH_ATTR p2pSendAckToMac(p2pInfo* p2p, uint8_t* mac_addr)
 {
-    p2p_printf("%s\r\n", __func__);
-
+    p2p_printf("%s %s\r\n", __func__, p2p->msgId);
     ets_snprintf(p2p->ackMsg, sizeof(p2p->ackMsg), p2pNoPayloadMsgFmt,
                  p2p->msgId,
                  "ack",
@@ -811,9 +842,8 @@ void ICACHE_FLASH_ATTR p2pSendAckToMac(p2pInfo* p2p, uint8_t* mac_addr)
  */
 void ICACHE_FLASH_ATTR p2pGameStartAckRecv(void* arg)
 {
-    p2p_printf("%s\r\n", __func__);
-
     p2pInfo* p2p = (p2pInfo*)arg;
+    p2p_printf("%s %s\r\n", __func__, p2p->msgId);
     //TODO is p2p the one who ack'd, check side and otherSide
     p2pProcConnectionEvt(p2p, RX_GAME_START_ACK);
 }
@@ -829,7 +859,7 @@ void ICACHE_FLASH_ATTR p2pGameStartAckRecv(void* arg)
  */
 void ICACHE_FLASH_ATTR p2pProcConnectionEvt(p2pInfo* p2p, connectionEvt_t event)
 {
-    p2p_printf("%s evt: %d, p2p->cnc.rxGameStartMsg %d, p2p->cnc.rxGameStartAck %d\r\n", __func__, event,
+    p2p_printf("%s %s evt: %d, p2p->cnc.rxGameStartMsg %d, p2p->cnc.rxGameStartAck %d\r\n", __func__, p2p->msgId, event,
                p2p->cnc.rxGameStartMsg, p2p->cnc.rxGameStartAck);
 
     switch(event)
@@ -903,9 +933,8 @@ void ICACHE_FLASH_ATTR p2pProcConnectionEvt(p2pInfo* p2p, connectionEvt_t event)
  */
 void ICACHE_FLASH_ATTR p2pStartRestartTimer(void* arg)
 {
-    p2p_printf("%s\r\n", __func__);
-
     p2pInfo* p2p = (p2pInfo*)arg;
+    p2p_printf("%s %s\r\n", __func__, p2p->msgId);
     // If the connection isn't established in FAILURE_RESTART_MS, restart
     os_timer_arm(&p2p->tmr.Reinit, FAILURE_RESTART_MS, false);
 }
@@ -918,10 +947,8 @@ void ICACHE_FLASH_ATTR p2pStartRestartTimer(void* arg)
  */
 void ICACHE_FLASH_ATTR p2pRestart(void* arg)
 {
-    p2p_printf("%s\r\n", __func__);
-
     p2pInfo* p2p = (p2pInfo*)arg;
-
+    p2p_printf("%s %s\r\n", __func__, p2p->msgId);
     if(NULL != p2p->conCbFn)
     {
         p2p->conCbFn(p2p, CON_LOST);
@@ -954,7 +981,7 @@ void ICACHE_FLASH_ATTR p2pSendCb(p2pInfo* p2p, uint8_t* mac_addr __attribute__((
             if(0 != p2p->ack.timeSentUs)
             {
                 uint32_t transmissionTimeUs = system_get_time() - p2p->ack.timeSentUs;
-                p2p_printf("Transmission time %dus\r\n", transmissionTimeUs);
+                p2p_printf("%s Transmission time %dus\r\n", p2p->msgId, transmissionTimeUs);
                 // The timers are all millisecond, so make sure that
                 // transmissionTimeUs is at least 1ms
                 if(transmissionTimeUs < 1000)
