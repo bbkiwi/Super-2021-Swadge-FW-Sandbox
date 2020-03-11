@@ -5,7 +5,7 @@
 #include "font.h"
 #include "hsv_utils.h"
 
-//#define RING_DEBUG_PRINT
+#define RING_DEBUG_PRINT
 #ifdef RING_DEBUG_PRINT
     #define ring_printf(...) os_printf(__VA_ARGS__)
 #else
@@ -119,6 +119,7 @@ ringCon_t* ICACHE_FLASH_ATTR getRingConnection(p2pInfo* p2p)
  */
 void ICACHE_FLASH_ATTR ringEnterMode(void)
 {
+    ring_printf("%s\n", __func__);
     ets_memset(&connections, 0, sizeof(connections));
 
     memcpy(connections[0].lbl, "cn0", 3);
@@ -139,7 +140,7 @@ void ICACHE_FLASH_ATTR ringEnterMode(void)
     ringUpdateDisplay();
     for(i = 0; i < NUM_CONNECTIONS; i++)
     {
-        ring_printf("i = %d, side = %d", i, connections[i].p2p.side);
+        ring_printf("   i = %d, side = %d", i, connections[i].p2p.side);
     }
     ring_printf("\n");
 }
@@ -150,6 +151,7 @@ void ICACHE_FLASH_ATTR ringEnterMode(void)
  */
 void ICACHE_FLASH_ATTR ringExitMode(void)
 {
+    ring_printf("%s\n", __func__);
     uint8_t i;
     for(i = 0; i < NUM_CONNECTIONS; i++)
     {
@@ -188,7 +190,7 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
                     uint8_t i;
                     for(i = 0; i < NUM_CONNECTIONS; i++)
                     {
-                        //ring_printf("i = %d, side = %d", i, connections[i].p2p.side);
+                        //ring_printf("    i = %d, side = %d", i, connections[i].p2p.side);
                         if(0x0F == connections[i].p2p.side)
                         {
                             connections[i].p2p.side = connectionSide;
@@ -312,14 +314,14 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
         {
             for(uint8_t i = 0; i < NUM_CONNECTIONS; i++)
             {
-                ring_printf("i = %d, side = %d", i, connections[i].p2p.side);
+                ring_printf("    i = %d, side = %d", i, connections[i].p2p.side);
             }
             ring_printf("\n");
             getRingConnection(p2p)->p2p.side = connectionSide;
             os_snprintf(lastMsg, sizeof(lastMsg), "%s: CON_ESTABLISHED on side %d\n", conStr, connectionSide);
             for(uint8_t i = 0; i < NUM_CONNECTIONS; i++)
             {
-                ring_printf("i = %d, side = %d", i, connections[i].p2p.side);
+                ring_printf("    i = %d, side = %d", i, connections[i].p2p.side);
             }
             ring_printf("\n");
             break;
@@ -336,7 +338,7 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
             break;
         }
     }
-    ring_printf("%s", lastMsg);
+    ring_printf("%s %s", __func__, lastMsg);
     ringUpdateDisplay();
     return;
 }
@@ -367,9 +369,34 @@ void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, 
             os_printf("ringHueLeft = %d\n", ringHueLeft);
         }
     }
+    else if(0 == strcmp(msg, "rst"))
+    {
+        os_printf("RST message received\n");
+        for(uint8_t i = 0; i < NUM_CONNECTIONS; i++)
+        {
+            {
+                p2pStopConnection(&connections[i].p2p);
+            }
+        }
 
-    os_snprintf(lastMsg, sizeof(lastMsg), "Received %d bytes from %s\n", len, getRingConnection(p2p)->p2p.msgId);
-    ring_printf("%s", lastMsg);
+        if(RIGHT == getRingConnection(p2p)->p2p.side)
+        {
+            radiusRight = 1;
+            ringHueRight = p2pHex2Int(payload[3]) * 16 + p2pHex2Int(payload[4]);
+            os_printf("REPAIR ringHueRight = %d\n", ringHueRight);
+        }
+        else if(LEFT == getRingConnection(p2p)->p2p.side)
+        {
+            radiusLeft = 1;
+            ringHueLeft = p2pHex2Int(payload[3]) * 16 + p2pHex2Int(payload[4]);
+            os_printf("REPAIR ringHueLeft = %d\n", ringHueLeft);
+        }
+    }
+
+
+    os_snprintf(lastMsg, sizeof(lastMsg), "got msg=%s %s (%d bytes) from %s\n", msg, payload, len,
+                getRingConnection(p2p)->p2p.msgId);
+    ring_printf("%s %s", __func__, lastMsg);
     ringUpdateDisplay();
     return;
 }
@@ -403,7 +430,7 @@ void ICACHE_FLASH_ATTR ringMsgTxCbFn(p2pInfo* p2p, messageStatus_t status)
             break;
         }
     }
-    ring_printf("%s", lastMsg);
+    ring_printf("%s %s", __func__, lastMsg);
     ringUpdateDisplay();
     return;
 }
