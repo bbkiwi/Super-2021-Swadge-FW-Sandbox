@@ -211,13 +211,24 @@ void ICACHE_FLASH_ATTR espNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_t le
  * @param data The data to broadcast using ESP NOW
  * @param len  The length of the data to broadcast
  */
-void ICACHE_FLASH_ATTR espNowSend(const uint8_t* data, uint8_t len)
+void ICACHE_FLASH_ATTR espNowSend(uint8_t* mac_addr, const uint8_t* data, uint8_t len)
 {
     // Call this before each transmission to set the wifi speed
     wifi_set_user_fixed_rate(FIXED_RATE_MASK_ALL, PHY_RATE_54);
 
     // Send a packet
-    esp_now_send((uint8_t*)espNowBroadcastMac, (uint8_t*)data, len);
+    // TODO special for p2p
+    if (len <= 12) //broadcast
+    {
+        esp_now_send((uint8_t*)espNowBroadcastMac, (uint8_t*)data, len);
+        os_printf("ESPNOWSEND broadcast len = %d, data=%s\n", len, data);
+    }
+    else //send to specific mac_addr (can't be picked up by sniffer)
+    {
+        esp_now_send(mac_addr, (uint8_t*)data, len);
+        os_printf("ESPNOWSEND to %02X:%02X:%02X:%02X:%02X:%02X len = %d, data=%s\n", mac_addr[0], mac_addr[1], mac_addr[2],
+                  mac_addr[3], mac_addr[4], mac_addr[5], len, data);
+    }
 }
 
 /**

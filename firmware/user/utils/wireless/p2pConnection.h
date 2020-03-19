@@ -14,7 +14,8 @@ typedef enum
 
 typedef enum
 {
-    CON_STARTED,
+    CON_BROADCAST_STARTED,
+    CON_LISTENING_STARTED,
     RX_BROADCAST,
     RX_GAME_START_ACK,
     RX_GAME_START_MSG,
@@ -39,11 +40,21 @@ typedef void (*p2pMsgTxCbFn)(p2pInfo* p2p, messageStatus_t status);
 typedef struct _p2pInfo
 {
     // Messages that every mode uses
+    // size needs to be 1 more than longest string (to hold NULL terminator)
     char msgId[4];
-    char conMsg[10];
-    char ackMsg[32];
-    char startMsg[32];
+    char conMsg[13];
+    char ackMsg[75];
+    char startMsg[35];
+
+    // identifiers
     button_mask side;
+    char macStr[18];
+    uint8_t ringSeq;
+
+    bool otherConnectionMade; // ok for 2 but if have more possible?
+    //bool subsequentStartBroadcastFirst;
+    //bool subsequentStartListenFirst;
+    bool longPushButton;
 
     // Callback function pointers
     p2pConCbFn conCbFn;
@@ -71,11 +82,12 @@ typedef struct _p2pInfo
         bool broadcastReceived;
         bool rxGameStartMsg;
         bool rxGameStartAck;
+        bool otherMacReceived;
         playOrder_t playOrder;
-        char macStr[18];
+        uint8_t otherRingSeq;
         uint8_t otherMac[6];
         button_mask otherSide;
-        bool otherMacReceived;
+        uint8_t otherRssi; // rssi when it connected
         uint8_t mySeqNum;
         uint8_t lastSeqNum;
     } cnc;
@@ -95,13 +107,16 @@ void ICACHE_FLASH_ATTR p2pInitialize(p2pInfo* p2p, char* msgId,
                                      p2pMsgRxCbFn msgRxCbFn, uint8_t connectionRssi);
 void ICACHE_FLASH_ATTR p2pDeinit(p2pInfo* p2p);
 void ICACHE_FLASH_ATTR p2pRestart(void* arg);
+void ICACHE_FLASH_ATTR p2pDumpInfo(p2pInfo* p2p);
 
 void ICACHE_FLASH_ATTR p2pStartConnection(p2pInfo* p2p);
+void ICACHE_FLASH_ATTR p2pStartConnectionBroadcast(p2pInfo* p2p);
+void ICACHE_FLASH_ATTR p2pStartConnectionListening(p2pInfo* p2p);
 void ICACHE_FLASH_ATTR p2pStopConnection(p2pInfo* p2p);
 
 void ICACHE_FLASH_ATTR p2pSendMsg(p2pInfo* p2p, char* msg, char* payload, uint16_t len, p2pMsgTxCbFn msgTxCbFn);
-void ICACHE_FLASH_ATTR p2pSendCb(p2pInfo* p2p, uint8_t* mac_addr, mt_tx_status status);
-void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* mac_addr, uint8_t* data, uint8_t len, uint8_t rssi);
+void ICACHE_FLASH_ATTR p2pSendCb(p2pInfo* p2p, uint8_t* recipient_mac_addr, mt_tx_status status, uint16_t sendCbCnt);
+void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_t* data, uint8_t len, uint8_t rssi, uint16_t recvCbCnt);
 
 playOrder_t ICACHE_FLASH_ATTR p2pGetPlayOrder(p2pInfo* p2p);
 void ICACHE_FLASH_ATTR p2pSetPlayOrder(p2pInfo* p2p, playOrder_t order);

@@ -155,12 +155,12 @@ typedef struct _swadgeMode
 void ICACHE_FLASH_ATTR setLeds(led_t* ledData, uint16_t ledDataLen);
 
 /**
- * Wrapper for esp_now_send() which always broadcasts packets and sets wifi power
+ * Wrapper for esp_now_send() which always broadcasts or sends to specific mac_addr packets and sets wifi power
  *
  * @param data The data to be broadcast
- * @param len  The length of the data to broadcast
+ * @param len  The length of the data to broadcast (if len <= 12 will broadcast)
  */
-void ICACHE_FLASH_ATTR espNowSend(const uint8_t* data, uint8_t len);
+void ICACHE_FLASH_ATTR espNowSend(uint8_t* mac_addr, const uint8_t* data, uint8_t len);
 
 void ICACHE_FLASH_ATTR showLedCount(uint8_t num, uint32_t color);
 uint32_t ICACHE_FLASH_ATTR getLedColorPerNumber(uint8_t num, uint8_t lightness);

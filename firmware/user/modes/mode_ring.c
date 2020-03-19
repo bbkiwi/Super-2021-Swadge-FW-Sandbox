@@ -18,6 +18,7 @@
 #define ringPrintf(...) do { \
         os_snprintf(lastMsg, sizeof(lastMsg), __VA_ARGS__); \
         os_printf("%s", lastMsg); \
+        ringLastMsgTextIdx = SCROLL_GAP; \
         ringUpdateDisplay(); \
     } while(0)
 #else
@@ -40,6 +41,11 @@
 #define LED_LOWER_MID LED_5
 #define LED_LOWER_LEFT LED_6
 
+#define LEFT_SIDE 0
+#define RIGHT_SIDE 1
+#define SCROLL_GAP 30
+
+
 /*==============================================================================
  * Function Prototypes
  *============================================================================*/
@@ -56,9 +62,10 @@ void ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, uint8_t len);
 void ringMsgTxCbFn(p2pInfo* p2p, messageStatus_t status);
 
 void ringUpdateDisplay(void);
-void ringAnimationTimer(void* arg __attribute__((unused)));
+void ringAnimation(void* arg __attribute__((unused)));
 void ringSetLeds(led_t* ledData, uint8_t ledDataLen);
-
+void ringScrollLastMsg(void* arg __attribute__((unused)));
+void ringLongPressTimerFunc(void* arg __attribute__((unused)));
 p2pInfo* getSideConnection(button_mask side);
 p2pInfo* getRingConnection(p2pInfo* p2p);
 
@@ -71,6 +78,14 @@ uint8_t ledCnOrderInd[] = {LED_UPPER_LEFT, LED_LOWER_LEFT, LED_UPPER_MID, LED_LO
 
 uint8_t ringBrightnessIdx = 2;
 uint8_t indLed;
+int16_t ringLastMsgTextIdx;
+bool ringLongPress;
+
+// TODO remove eventually
+// For debugging
+uint16_t recvCbCnt;
+uint16_t sendCbCnt;
+
 static led_t leds[NUM_LIN_LEDS] = {{0}};
 // When using gamma correcton
 static const uint8_t ringBrightnesses[] =
@@ -93,18 +108,22 @@ swadgeMode ringMode =
     .fnAccelerometerCallback = ringAccelerometerCallback
 };
 
-p2pInfo connections[3];
-static char* connectionLbl[] = {"cn0", "cn1", "cn2"};
+p2pInfo connections[2];
 
 button_mask connectionSide;
 
 char lastMsg[256];
 
-os_timer_t animationTimer;
+os_timer_t ringAnimationTimer;
+os_timer_t scrollLastMsgTimer;
+os_timer_t ringLongPressTimerTimer;
 uint8_t radiusLeft = 0;
 uint8_t radiusRight = 0;
 uint8_t ringHueRight;
 uint8_t ringHueLeft;
+// TODO this is number assigned to swadge so maybe should be computed in this mode
+uint8_t ringSeq;
+
 
 /*==============================================================================
  * Functions
@@ -123,12 +142,28 @@ void ICACHE_FLASH_ATTR ringEnterMode(void)
     uint8_t i;
     for(i = 0; i < lengthof(connections); i++)
     {
-        p2pInitialize(&connections[i], connectionLbl[i], ringConCbFn, ringMsgRxCbFn, 0);
+        //TODO could have side and otherSide ( which may become socket) as parameter of p2pInitialize
+        p2pInitialize(&connections[i], "rng", ringConCbFn, ringMsgRxCbFn, 0);
+        // Extra stuff to initialize
+        connections[i].side = (i == 0) ? LEFT : RIGHT;
+        connections[i].cnc.otherSide = (i == 0) ? RIGHT : LEFT;
     }
 
+    enableDebounce(false);
+
     // Set up an animation timer
-    os_timer_setfn(&animationTimer, ringAnimationTimer, NULL);
-    os_timer_arm(&animationTimer, 50, true);
+    os_timer_disarm(&ringAnimationTimer);
+    os_timer_setfn(&ringAnimationTimer, ringAnimation, NULL);
+    os_timer_arm(&ringAnimationTimer, 50, true);
+
+    // Set up a timer to scroll the instructions
+    os_timer_disarm(&scrollLastMsgTimer);
+    os_timer_setfn(&scrollLastMsgTimer, ringScrollLastMsg, NULL);
+    os_timer_arm(&scrollLastMsgTimer, 34, true);
+
+    // Set up a timer to determin long press of button
+    os_timer_disarm(&ringLongPressTimerTimer);
+    os_timer_setfn(&ringLongPressTimerTimer, ringLongPressTimerFunc, NULL);
 
     // Draw the initial display
     ringUpdateDisplay();
@@ -151,6 +186,9 @@ void ICACHE_FLASH_ATTR ringExitMode(void)
     {
         p2pDeinit(&connections[i]);
     }
+    os_timer_disarm(&ringAnimationTimer);
+    os_timer_disarm(&scrollLastMsgTimer);
+    os_timer_disarm(&ringLongPressTimerTimer);
 }
 
 /**
@@ -166,6 +204,14 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
     // If it was pressed
     if(down)
     {
+        // Start a timer to specify  long press of button
+        os_timer_arm(&ringLongPressTimerTimer, 1000, false);
+        ringLongPress = false;
+    }
+    else // Released
+    {
+        // Stop the timer no matter what
+        os_timer_disarm(&ringLongPressTimerTimer);
         switch(button)
         {
             default:
@@ -179,25 +225,42 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
             {
                 // Save which button was pressed
                 button_mask side = (button == 1) ? LEFT : RIGHT;
+                // get index of connection for the side
+                uint8_t idx =  (button == 1) ? LEFT_SIDE : RIGHT_SIDE;
+                uint8_t otherIdx =  (button == 2) ? LEFT_SIDE : RIGHT_SIDE;
 
-                // If no one's connected on this side
-                if(NULL == getSideConnection(side))
+                // If not connected on this side start connection there
+                //if(0x00 == connections[idx].side)
+                if (!connections[idx].cnc.isConnecting && !connections[idx].cnc.isConnected )
                 {
-                    // Start connections for unconnected p2ps
-                    connectionSide = side;
-                    uint8_t i;
-                    for(i = 0; i < lengthof(connections); i++)
-                    {
-                        //  ring_printf("i = %d, side = %d ", i, connections[i].side);
-                        if(0x00 == connections[i].side)
-                        {
-                            connections[i].side = connectionSide;
-                            p2pStartConnection(&(connections[i]));
-                        }
-                    }
-                    //  ring_printf("\n");
+                    // connections[idx].side = side; // did in ringEnter
+                    //TODO Important p2pStartConnection needs to know if other connection has been made
+
+                    connections[idx].otherConnectionMade = connections[otherIdx].cnc.isConnected;
+                    // also need to know if long push made
+                    connections[idx].longPushButton = ringLongPress;
+
+                    //TODO Alternative idea: if other side connected pushing R starts listening only, L starts broadcasting only so can complete ring
+                    // if (button == 1)
+                    // {
+                    //     connections[idx].subsequentStartListenFirst = false;
+                    // }
+                    // else
+                    // {
+                    //     connections[idx].subsequentStartListenFirst = true;
+                    // }
+                    //connections[idx].cnc.otherSide = connections[otherIdx].side;
+
+                    p2pStartConnection(&(connections[idx]));
+                    p2pDumpInfo(&(connections[idx]));
+                    ring_printf("Start connection on %s side listening for a %s side\n    %s Connection starting with %s.\n    idx = %d, side = %d cnc.otherSide = %d\n",
+                                (idx == 0) ? "LEFT" : "RIGHT", (idx == 1) ? "LEFT" : "RIGHT", connections[idx].otherConnectionMade ? "Second" : "First",
+                                (ringLongPress || !connections[idx].otherConnectionMade) ? "broadcast and listening" : "listening only",
+                                idx, connections[idx].side,
+                                connections[idx].cnc.otherSide);
                 }
-                else
+
+                else if  (connections[idx].cnc.isConnected)
                 {
                     // Light led with random hue on correct side
                     uint8_t randomHue = os_random();
@@ -211,10 +274,10 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
                         radiusRight = 1;
                         ringHueRight = randomHue;
                     }
-                    // Send a message with hue
+                    // Send a message via the connection with hue
                     char testMsg[256] = {0};
                     ets_sprintf(testMsg, "%02X is the hue", randomHue);
-                    p2pSendMsg(getSideConnection(side), "tst", testMsg, sizeof(testMsg),
+                    p2pSendMsg(&(connections[idx]), "tst", testMsg, sizeof(testMsg),
                                ringMsgTxCbFn);
                 }
                 break;
@@ -236,9 +299,10 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
 void ICACHE_FLASH_ATTR ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_t len, uint8_t rssi)
 {
     uint8_t i;
+    recvCbCnt++;
     for(i = 0; i < lengthof(connections); i++)
     {
-        p2pRecvCb(&(connections[i]), mac_addr, data, len, rssi);
+        p2pRecvCb(&(connections[i]), mac_addr, data, len, rssi, recvCbCnt);
     }
     ringUpdateDisplay();
 }
@@ -247,23 +311,24 @@ void ICACHE_FLASH_ATTR ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_
  * Callback function when ESP-NOW sends a packet. Forward everything to all p2p
  * connections and let them handle it
  *
- * @param mac_addr unused
+ * @param mac_addr that message was sent to
  * @param status   Whether the transmission succeeded or failed
  */
 void ICACHE_FLASH_ATTR ringEspNowSendCb(uint8_t* mac_addr, mt_tx_status status)
 {
     uint8_t i;
+    sendCbCnt++;
     for(i = 0; i < lengthof(connections); i++)
     {
-        p2pSendCb(&(connections[i]), mac_addr, status);
+        p2pSendCb(&(connections[i]), mac_addr, status, sendCbCnt);
     }
     ringUpdateDisplay();
 }
 
 
 /**
- * Callback function when p2p connection events occur. Whenever a connection
- * starts, halt all the other p2ps from connecting.
+ * Callback function when p2p connection events occur.
+ * TODO Removed:Whenever a connection starts, halt all the other p2ps from connecting.
  *
  * @param p2p The p2p struct which emitted a connection event
  * @param evt The connection event
@@ -275,11 +340,18 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
 
     switch(evt)
     {
-        case CON_STARTED:
+        case CON_BROADCAST_STARTED:
         {
-            ringPrintf("%s: CON_STARTED\n", conStr);
+            ringPrintf("%s: CON_BROADCAST_STARTED\n", conStr);
             break;
         }
+
+        case CON_LISTENING_STARTED:
+        {
+            ringPrintf("%s: CON_LISTENING_STARTED\n", conStr);
+            break;
+        }
+
         case CON_STOPPED:
         {
             ringPrintf("%s: CON_STOPPED\n", conStr);
@@ -290,14 +362,15 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
         case RX_GAME_START_MSG:
         {
             // As soon as one connection starts, stop the others
-            uint8_t i;
-            for(i = 0; i < lengthof(connections); i++)
-            {
-                if(p2p != &connections[i])
-                {
-                    p2pStopConnection(&connections[i]);
-                }
-            }
+            // TODO  does not seem to be needed so comment out. Check why was done
+            // uint8_t i;
+            // for(i = 0; i < lengthof(connections); i++)
+            // {
+            //     if(p2p != &connections[i])
+            //     {
+            //         p2pStopConnection(&connections[i]);
+            //     }
+            // }
             ringPrintf("%s: %s\n", conStr,
                        (evt == RX_BROADCAST) ? "RX_BROADCAST" :
                        ((evt == RX_GAME_START_ACK) ? "RX_GAME_START_ACK" :
@@ -306,26 +379,21 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
         }
         case CON_ESTABLISHED:
         {
-            for(uint8_t i = 0; i < lengthof(connections); i++)
-            {
-                ring_printf("i = %d, side = %d ", i, connections[i].side);
-            }
-            ring_printf("\n");
-            // When a connection is established, save the current side to that
-            // connection
-            getRingConnection(p2p)->side = connectionSide;
-            ringPrintf("%s: CON_ESTABLISHED on side %d\n", conStr, connectionSide);
-            for(uint8_t i = 0; i < lengthof(connections); i++)
-            {
-                ring_printf("i = %d, side = %d ", i, connections[i].side);
-            }
-            ring_printf("\n");
+            // TODO maybe later if allow otherSide to be decided when connection is made
+            // When a connection is established, save the current side to that connection
+            //getRingConnection(p2p)->cnc.otherSide = connectionSide;
+            ringPrintf("%s: CON_ESTABLISHED on side %d to side %d\n", conStr, getRingConnection(p2p)->side,
+                       getRingConnection(p2p)->cnc.otherSide);
+            // TODO maybe set ringSeq here
             break;
         }
         case CON_LOST:
         {
+            // TODO maybe later if allow otherSide to be decided when connection is made
             // When a connection is lost, clear that side
-            getRingConnection(p2p)->side = 0x00;
+            //getRingConnection(p2p)->cnc.otherSide = 0x00;
+            // When a connection is lost, change isConnected flag
+            getRingConnection(p2p)->cnc.isConnected = false;
             ringPrintf("%s: CON_LOST\n", conStr);
             break;
         }
@@ -348,7 +416,6 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
  * @param payload The payload for the received message
  * @param len     The length of the payload
  */
-//TODO Here ignore payload, but may for more sophisiticated use may want to include
 void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, uint8_t len)
 {
     if(0 == strcmp(msg, TST_LABEL))
@@ -356,13 +423,13 @@ void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, 
         if(RIGHT == getRingConnection(p2p)->side)
         {
             radiusRight = 1;
-            ringHueRight = p2pHex2Int(payload[3]) * 16 + p2pHex2Int(payload[4]);
+            ringHueRight = p2pHex2Int(payload[6]) * 16 + p2pHex2Int(payload[7]);
             ring_printf("ringHueRight = %d\n", ringHueRight);
         }
         else if(LEFT == getRingConnection(p2p)->side)
         {
             radiusLeft = 1;
-            ringHueLeft = p2pHex2Int(payload[3]) * 16 + p2pHex2Int(payload[4]);
+            ringHueLeft = p2pHex2Int(payload[6]) * 16 + p2pHex2Int(payload[7]);
             ring_printf("ringHueLeft = %d\n", ringHueLeft);
         }
     }
@@ -379,13 +446,13 @@ void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, 
         if(RIGHT == getRingConnection(p2p)->side)
         {
             radiusRight = 1;
-            ringHueRight = p2pHex2Int(payload[3]) * 16 + p2pHex2Int(payload[4]);
+            ringHueRight = p2pHex2Int(payload[6]) * 16 + p2pHex2Int(payload[7]);
             ring_printf("REPAIR ringHueRight = %d\n", ringHueRight);
         }
         else if(LEFT == getRingConnection(p2p)->side)
         {
             radiusLeft = 1;
-            ringHueLeft = p2pHex2Int(payload[3]) * 16 + p2pHex2Int(payload[4]);
+            ringHueLeft = p2pHex2Int(payload[6]) * 16 + p2pHex2Int(payload[7]);
             ring_printf("REPAIR ringHueLeft = %d\n", ringHueLeft);
         }
     }
@@ -421,7 +488,11 @@ void ICACHE_FLASH_ATTR ringMsgTxCbFn(p2pInfo* p2p, messageStatus_t status)
         {
             // Message failed, disconnect that side
             ringPrintf("%s: MSG_FAILED\n", conStr);
-            getRingConnection(p2p)->side = 0x00;
+            //TODO do we want this or is there another way to indicate connection broken???
+            //getRingConnection(p2p)->cnc.otherSide = 0x00;
+            getRingConnection(p2p)->cnc.isConnected = false;
+            //TODO check
+            getRingConnection(p2p)->cnc.isConnecting = false; // needed?
             break;
         }
         default:
@@ -488,43 +559,62 @@ p2pInfo* ICACHE_FLASH_ATTR getRingConnection(p2pInfo* p2p)
 void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
 {
     uint8_t i;
-    char macStr[8];
+    char macStr[6];
+    char sidesStr[4];
     uint32_t colorToShow;
     clearDisplay();
 
-    plotText(45, 0, &connections[0].cnc.macStr[12], IBM_VGA_8, WHITE);
+    plotText(45, 0, &connections[0].macStr[12], IBM_VGA_8, WHITE);
 
-    plotText(6, 12, lastMsg, IBM_VGA_8, WHITE);
+
+    // Draw lastMsg ticker
+    int16_t plotTextOut = plotText(ringLastMsgTextIdx, 12, lastMsg, IBM_VGA_8, WHITE);
+    // repeat text again, so gives continuous scroll of text
+    plotText(SCROLL_GAP + plotTextOut, 12, lastMsg, IBM_VGA_8, WHITE);
+    if (0 > plotTextOut)
+    {
+        ringLastMsgTextIdx = SCROLL_GAP;
+    }
+    //plotText(6, 12, lastMsg, IBM_VGA_8, WHITE);
 
     for(i = 0; i < lengthof(connections); i++)
     {
+
+        if (connections[i].cnc.isConnected)
+        {
+            os_snprintf(sidesStr, sizeof(sidesStr), "%01d%01d+", connections[i].side,
+                        connections[i].cnc.otherSide);
+            plotText(104 * i, 0, sidesStr, IBM_VGA_8, WHITE);
+        }
+        else if (connections[i].cnc.isConnecting)
+        {
+            os_snprintf(sidesStr, sizeof(sidesStr), "%01d%01d-", connections[i].side,
+                        connections[i].cnc.otherSide);
+            plotText(104 * i, 0, sidesStr, IBM_VGA_8, WHITE);
+        }
+        else
+        {
+            os_snprintf(sidesStr, sizeof(sidesStr), "%01d%01d ", connections[i].side,
+                        connections[i].cnc.otherSide);
+            plotText(104 * i, 0, sidesStr, IBM_VGA_8, WHITE);
+        }
+
+
         if(connections[i].cnc.otherMacReceived)
         {
             os_snprintf(macStr, sizeof(macStr), "%02X:%02X", connections[i].cnc.otherMac[4],
                         connections[i].cnc.otherMac[5]);
-            plotText(6 + 40 * i, 24, macStr, IBM_VGA_8, WHITE);
+            plotText(6 + 80 * i, 24, macStr, IBM_VGA_8, WHITE);
         }
         if (connections[i].cnc.playOrder > 0)
         {
             os_snprintf(macStr, sizeof(macStr), "p%d", connections[i].cnc.playOrder);
-            plotText(6 + 40 * i, 36, macStr, IBM_VGA_8, WHITE);
+            plotText(6 + 80 * i, 36, macStr, IBM_VGA_8, WHITE);
         }
         if(connections[i].ack.isWaitingForAck)
         {
-            plotText(6 + 40 * i, 48, "ack ?", IBM_VGA_8, WHITE);
+            plotText(6 + 80 * i, 48, "ack ?", IBM_VGA_8, WHITE);
         }
-    }
-
-    if(NULL != getSideConnection(RIGHT))
-    {
-        plotText(104, 0, getSideConnection(RIGHT)->msgId, IBM_VGA_8, WHITE);
-        //plotRect(OLED_WIDTH - 5, 0, OLED_WIDTH - 1, 5, WHITE);
-    }
-
-    if(NULL != getSideConnection(LEFT))
-    {
-        plotText(0, 0, getSideConnection(LEFT)->msgId, IBM_VGA_8, WHITE);
-        //plotRect(0, 0, 4, 5, WHITE);
     }
 
     //Clear leds
@@ -554,33 +644,45 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
         {
             if(connections[i].cnc.isConnecting)
             {
-                leds[ledCnOrderInd[2 * i]].r = 255;
+                leds[ledCnOrderInd[4 * i]].r = 255;
             }
             else if (connections[i].cnc.isConnected)
             {
-                leds[ledCnOrderInd[2 * i]].g = 255;
+                leds[ledCnOrderInd[4 * i]].g = 255;
             }
             else if (connections[i].cnc.broadcastReceived)
             {
-                leds[ledCnOrderInd[2 * i]].r = 255;
-                leds[ledCnOrderInd[2 * i]].g = 255;
+                leds[ledCnOrderInd[4 * i]].r = 255;
+                leds[ledCnOrderInd[4 * i]].g = 255;
             }
 
             if(connections[i].cnc.otherMacReceived)
             {
-                leds[ledCnOrderInd[2 * i + 1]].r = 255;
+                leds[ledCnOrderInd[4 * i + 1]].r = 255;
             }
             if (connections[i].cnc.rxGameStartAck)
             {
-                leds[ledCnOrderInd[2 * i + 1]].g = 255;
+                leds[ledCnOrderInd[4 * i + 1]].g = 255;
             }
             if (connections[i].cnc.rxGameStartMsg)
             {
-                leds[ledCnOrderInd[2 * i + 1]].b = 255;
+                leds[ledCnOrderInd[4 * i + 1]].b = 255;
             }
         }
     }
     ringSetLeds(leds, sizeof(leds));
+}
+
+
+/**
+ * @brief Decrement the index to draw the instructions at, then draw the menu
+ *
+ * @param arg unused
+ */
+void ICACHE_FLASH_ATTR ringScrollLastMsg(void* arg __attribute__((unused)))
+{
+    ringLastMsgTextIdx--;
+    ringUpdateDisplay();
 }
 
 /**
@@ -588,7 +690,7 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
  *
  * @param arg unused
  */
-void ICACHE_FLASH_ATTR ringAnimationTimer(void* arg __attribute__((unused)))
+void ICACHE_FLASH_ATTR ringAnimation(void* arg __attribute__((unused)))
 {
     // Keep track if we should update the OLED
     bool shouldUpdate = false;
@@ -650,6 +752,19 @@ void ICACHE_FLASH_ATTR ringSetLeds(led_t* ledData, uint8_t ledDataLen)
     }
     setLeds(ledsAdjusted, ledDataLen);
 }
+
+/**
+ * Timer started when a button is pressed.
+ * If it expires before the button is released, set the long press flag
+ * If it doesn't expire before the button is released, switch the mode params
+ *
+ * @param arg unused
+ */
+void ICACHE_FLASH_ATTR ringLongPressTimerFunc(void* arg __attribute__((unused)))
+{
+    ringLongPress = true;
+}
+
 
 /**
  * @brief AccelerometerCallback
