@@ -541,6 +541,7 @@ void ICACHE_FLASH_ATTR p2pSendMsgEx(p2pInfo* p2p, char* msg, uint16_t len,
         p2p->ack.timeSentUs = system_get_time();
     }
     //TODO NOTE using mod of espNowSend which sends to specific or broadcast
+    p2p->sendCnt++;
     espNowSend(p2p->cnc.otherMac, (const uint8_t*)msg, len);
 }
 
@@ -1157,6 +1158,21 @@ void ICACHE_FLASH_ATTR p2pRestart(void* arg)
  */
 void ICACHE_FLASH_ATTR p2pSendCb(p2pInfo* p2p, uint8_t* recipient_mac_addr, mt_tx_status status, uint16_t sendCbCnt)
 {
+#define TEST_SENDCNT
+#ifdef TEST_SENDCNT
+    p2p_printf("SendCb %d p2p->sendCnt = %d\r\n", sendCbCnt, p2p->sendCnt);
+    if (p2p->sendCnt == 0)
+    {
+        p2p_printf("SendCb %d not for send by %s %s, do nothing\r\n", sendCbCnt, p2p->msgId,
+                   p2p->side == LEFT ? "LEFT" : "RIGHT");
+        return;
+    }
+    if (p2p->sendCnt < 0)
+    {
+        p2p_printf("SendCb %d ERROR sendCnt negative r\n", sendCbCnt);
+    }
+    p2p->sendCnt--;
+#else
     bool broadcast = (recipient_mac_addr[0] == 0xFF) && (recipient_mac_addr[1] == 0xFF) && (recipient_mac_addr[2] == 0xFF)
                      && (recipient_mac_addr[3] == 0xFF) && (recipient_mac_addr[4] == 0xFF) && (recipient_mac_addr[5] == 0xFF);
     if (broadcast)
@@ -1187,7 +1203,7 @@ void ICACHE_FLASH_ATTR p2pSendCb(p2pInfo* p2p, uint8_t* recipient_mac_addr, mt_t
         p2p_printf("  DISCARD as no otherMac specified\r\n");
         return;
     }
-
+#endif
     p2p_printf("  status MT_TX_STATUS_%s timeSent:%d\r\n",
                status == MT_TX_STATUS_OK ? "OK" : (status == MT_TX_STATUS_FAILED ? "FAILED" : "UNKNOWN"), p2p->ack.timeSentUs);
     p2pDumpInfo(p2p);

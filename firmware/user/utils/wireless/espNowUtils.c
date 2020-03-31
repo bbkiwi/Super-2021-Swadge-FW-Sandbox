@@ -17,6 +17,7 @@
 #include "espNowUtils.h"
 #include "user_main.h"
 
+#define ALWAYS_BROADCAST
 //#define SNIFFER_OUTPUT
 /*============================================================================
  * Variables
@@ -217,6 +218,10 @@ void ICACHE_FLASH_ATTR espNowSend(uint8_t* mac_addr, const uint8_t* data, uint8_
     wifi_set_user_fixed_rate(FIXED_RATE_MASK_ALL, PHY_RATE_54);
 
     // Send a packet
+#ifdef ALWAYS_BROADCAST
+    esp_now_send((uint8_t*)espNowBroadcastMac, (uint8_t*)data, len);
+    os_printf("ESPNOWSEND using broadcast len = %d, data=%s\n", len, data);
+#else
     // TODO special for p2p
     if (len <= 12) //broadcast
     {
@@ -229,6 +234,7 @@ void ICACHE_FLASH_ATTR espNowSend(uint8_t* mac_addr, const uint8_t* data, uint8_
         os_printf("ESPNOWSEND to %02X:%02X:%02X:%02X:%02X:%02X len = %d, data=%s\n", mac_addr[0], mac_addr[1], mac_addr[2],
                   mac_addr[3], mac_addr[4], mac_addr[5], len, data);
     }
+#endif
 }
 
 /**

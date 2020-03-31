@@ -231,7 +231,11 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
 
                 // If not connected on this side start connection there
                 //if(0x00 == connections[idx].side)
-                if (!connections[idx].cnc.isConnecting && !connections[idx].cnc.isConnected )
+                // TODO do I need to test for both here?
+                //if (!connections[idx].cnc.isConnecting && !connections[idx].cnc.isConnected )
+                // TODO ok? This will allow multiple (long) push so for last if forget long push, can do again
+                // What about long push too early?
+                if (!connections[idx].cnc.isConnected )
                 {
                     // connections[idx].side = side; // did in ringEnter
                     //TODO Important p2pStartConnection needs to know if other connection has been made

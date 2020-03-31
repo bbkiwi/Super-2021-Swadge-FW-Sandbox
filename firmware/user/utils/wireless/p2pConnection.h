@@ -50,6 +50,7 @@ typedef struct _p2pInfo
     button_mask side;
     char macStr[18];
     uint8_t ringSeq;
+    int16_t sendCnt;
 
     bool otherConnectionMade; // ok for 2 but if have more possible?
     //bool subsequentStartBroadcastFirst;
