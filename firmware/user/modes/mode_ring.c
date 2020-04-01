@@ -362,9 +362,23 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
             break;
         }
         case RX_BROADCAST:
+            ringPrintf("%s: %s\n", conStr, "RX_BROADCAST");
+            break;
         case RX_GAME_START_ACK:
+            ringPrintf("%s: %s\n", conStr, "RX_GAME_START_ACK");
+            break;
         case RX_GAME_START_MSG:
         {
+            ringPrintf("%s: %s\n", conStr, "RX_GAME_START_MSG");
+            // Set other connections ringSeq
+            uint8_t otherIdx = getRingConnection(p2p)->side == LEFT ? RIGHT_SIDE : LEFT_SIDE;
+            ringPrintf(" this other con made=%d, other other con made=%d\n", getRingConnection(p2p)->otherConnectionMade,
+                       connections[otherIdx].otherConnectionMade);
+
+            if(!getRingConnection(p2p)->otherConnectionMade)
+            {
+                connections[otherIdx].ringSeq = getRingConnection(p2p)->ringSeq;
+            }
             // As soon as one connection starts, stop the others
             // TODO  does not seem to be needed so comment out. Check why was done
             // uint8_t i;
@@ -375,10 +389,6 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
             //         p2pStopConnection(&connections[i]);
             //     }
             // }
-            ringPrintf("%s: %s\n", conStr,
-                       (evt == RX_BROADCAST) ? "RX_BROADCAST" :
-                       ((evt == RX_GAME_START_ACK) ? "RX_GAME_START_ACK" :
-                        "RX_GAME_START_MSG") );
             break;
         }
         case CON_ESTABLISHED:
@@ -612,7 +622,7 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
         }
         if (connections[i].cnc.playOrder > 0)
         {
-            os_snprintf(macStr, sizeof(macStr), "p%d", connections[i].cnc.playOrder);
+            os_snprintf(macStr, sizeof(macStr), "p%d %02X", connections[i].cnc.playOrder, connections[i].ringSeq);
             plotText(6 + 80 * i, 36, macStr, IBM_VGA_8, WHITE);
         }
         if(connections[i].ack.isWaitingForAck)
