@@ -17,7 +17,6 @@
 #include "espNowUtils.h"
 #include "user_main.h"
 
-#define ALWAYS_BROADCAST
 //#define SNIFFER_OUTPUT
 /*============================================================================
  * Variables

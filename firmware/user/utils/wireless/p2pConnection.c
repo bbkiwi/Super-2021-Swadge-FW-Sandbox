@@ -4,21 +4,24 @@
 //      rather than all
 // Added cnc.msgRepeatCnt so when get repeat messages can see if any get missed
 // TODO using 1 byte (char) for cnc.mySeqNum; and cnc.msgRepeatCnt. Using str
+// Note since now messages may contain a zero byte, do NOT use
+//    ets_strlen(p2p->startMsg) but sizeof(p2p->startMsg) - 1 instead
 //    op to make message and testing str length will cause problem is the byte
 //    is ever zero as thinks this is end of string and gets length wrong.
 //    maybe make len part of header of message
-
+// Note ack message contains copy of message it is acking. Prob can remove (just for testing)
+// Some storage may be overwritten
+// Not working now
 /*============================================================================
  * Includes
  *==========================================================================*/
-
 #include <osapi.h>
 #include <user_interface.h>
 #include <mem.h>
 
 #include "user_main.h"
 #include "p2pConnection.h"
-
+#include "espNowUtils.h"
 /*============================================================================
  * Defines
  *==========================================================================*/
@@ -26,6 +29,15 @@
 //#define HANDLE_MSG_TO_RESTARTED_SWADGE
 //#define SHOW_DISCARD
 //#define SHOW_DUMP
+// TEST_SENDCNT identifies which p2pSendCb is not associated
+//    with a send by counting
+// used when ALWAYS_BROADCAST is defined in espNowUtils.c
+//    (this is how adam original works)
+// If ALWAYS_BROADCAST is not defined, direct sending to otherMac
+//     is used, and alternative code is used in p2pSendCb
+#ifdef ALWAYS_BROADCAST
+    #define TEST_SENDCNT
+#endif
 
 #define P2P_DEBUG_PRINT
 #ifdef P2P_DEBUG_PRINT
@@ -64,15 +76,13 @@
 //TODO could refactor with messages made of char (bytes), mac is 6 bytes, seq 1 byte etc.
 //.    change debug and sniff to parse in readable form.
 // TODO change refs to fields to get side, otherSide and ringSeq
+//     also must be careful how compute length of the messages as strLen not work if any zero bytes
 
 // Messages to send.
 const char p2pConnectionMsgFmt[] = "%s_con_%1X_%02X";
 
-// TODO why 31 need to extend
-// Needs to be 31 chars or less!
 const char p2pNoPayloadMsgFmt[]  = "%s_%s_%c%c_%02X:%02X:%02X:%02X:%02X:%02X_%1X%1X_%02X";
 
-// Needs to be 63 chars or less!
 const char p2pPayloadMsgFmt[]    = "%s_%s_%c%c_%02X:%02X:%02X:%02X:%02X:%02X_%1X%1X_%02X_%s";
 const char p2pMacFmt[] = "%02X:%02X:%02X:%02X:%02X:%02X";
 
@@ -152,6 +162,7 @@ void ICACHE_FLASH_ATTR p2pInitialize(p2pInfo* p2p, char* msgId,
                  p2p->msgId, 0, 0);
 
     // Set up dummy ACK message
+    // TODO is this needed?
     ets_snprintf(p2p->ackMsg, sizeof(p2p->ackMsg), p2pNoPayloadMsgFmt,
                  p2p->msgId,
                  "ack",
@@ -324,7 +335,7 @@ void ICACHE_FLASH_ATTR p2pConnectionTimeout(void* arg)
     // Send a connection broadcast with side required and ringSeq so next seq can be computed.
     ets_snprintf(p2p->conMsg, sizeof(p2p->conMsg), p2pConnectionMsgFmt,
                  p2p->msgId, p2p->side, p2p->ringSeq);
-    p2pSendMsgEx(p2p, p2p->conMsg, ets_strlen(p2p->conMsg), false, NULL, NULL);
+    p2pSendMsgEx(p2p, p2p->conMsg, sizeof(p2p->conMsg) - 1, false, NULL, NULL);
 
     // os_random returns a 32 bit number, so this is [500ms,1500ms]
     uint32_t timeoutMs = 100 * (5 + (os_random() % 11));
@@ -404,8 +415,9 @@ void ICACHE_FLASH_ATTR p2pTxAllRetriesTimeout(void* arg)
 void ICACHE_FLASH_ATTR p2pSendMsg(p2pInfo* p2p, char* msg, char* payload,
                                   uint16_t len, p2pMsgTxCbFn msgTxCbFn)
 {
-    p2p_printf("%s %s\r\n", p2p->msgId, p2p->side == LEFT ? "LEFT" : "RIGHT");
-    char builtMsg[64] = {0}; // so longest message is 63 chars
+    p2p_printf("%s %s len=%d, payload=%s\r\n", p2p->msgId, p2p->side == LEFT ? "LEFT" : "RIGHT", len, payload);
+    // TODO changed
+    char builtMsg[85] = {0}; // so longest message is 85 chars
 
     if(NULL == payload || len == 0)
     {
@@ -444,7 +456,10 @@ void ICACHE_FLASH_ATTR p2pSendMsg(p2pInfo* p2p, char* msg, char* payload,
     }
 
     p2p->msgTxCbFn = msgTxCbFn;
-    p2pSendMsgEx(p2p, builtMsg, strlen(builtMsg), true, p2pModeMsgSuccess, p2pModeMsgFailure);
+    //TODO this could be a problem, maybe if payload (which is for user) is string
+    // compute length as 34 + ets_strlen(payload) instead of ets_strlen(builtMsg)
+    p2p_printf("ets_strlen(payload)=%d, builtMsg %s\n", ets_strlen(payload), builtMsg);
+    p2pSendMsgEx(p2p, builtMsg, 34 + ets_strlen(payload), true, p2pModeMsgSuccess, p2pModeMsgFailure);
 }
 
 /**
@@ -500,7 +515,7 @@ void ICACHE_FLASH_ATTR p2pSendMsgEx(p2pInfo* p2p, char* msg, uint16_t len,
     // If this is a first time message and longer than a connection message
     // TODO note the assumption is that all messages longer than con will be acked
     // If want to be able to broadcast long messages will need to change this
-    if (ets_strlen(p2p->conMsg) < len)
+    if (sizeof(p2p->conMsg) - 1 < len)
     {
         if(p2p->ack.msgToAck != msg)
         {
@@ -516,26 +531,17 @@ void ICACHE_FLASH_ATTR p2pSendMsgEx(p2pInfo* p2p, char* msg, uint16_t len,
             }
             // Sequence number 1 byte 0 to 0xFF
             // Insert a sequence number
-            msg[SEQ_IDX ] = p2p->cnc.mySeqNum;
+            msg[SEQ_IDX] = p2p->cnc.mySeqNum;
 
             // Increment the sequence number
-            //p2p->cnc.mySeqNum++;
-            if (p2p->cnc.mySeqNum++ > 0x7A)
-            {
-                p2p->cnc.mySeqNum = 0x30;
-            }
+            p2p->cnc.mySeqNum++;
 
-
-            //TODO can't handle 0x00 with string op as thinks terminates so limit to nice printing chars
             // Set repeat counter to zero
             p2p->cnc.msgRepeatCnt = 0x30;
         }
         else
         {
-            if (p2p->cnc.msgRepeatCnt++ > 0x7A)
-            {
-                p2p->cnc.msgRepeatCnt = 0x30;
-            }
+            p2p->cnc.msgRepeatCnt++;
         }
         msg[MSG_REPEAT_NUM] = p2p->cnc.msgRepeatCnt;
     }
@@ -543,7 +549,7 @@ void ICACHE_FLASH_ATTR p2pSendMsgEx(p2pInfo* p2p, char* msg, uint16_t len,
 #ifdef P2P_DEBUG_PRINT
     char* dbgMsg = (char*)os_zalloc(sizeof(char) * (len + 1));
     ets_memcpy(dbgMsg, msg, len);
-    p2p_printf("%s\r\n", dbgMsg);
+    p2p_printf("len=%d, %s\r\n", len, dbgMsg);
     os_free(dbgMsg);
 #endif
 
@@ -577,7 +583,7 @@ void ICACHE_FLASH_ATTR p2pSendMsgEx(p2pInfo* p2p, char* msg, uint16_t len,
         p2p->ack.timeSentUs = system_get_time();
         p2p_printf("   time started %d\n", p2p->ack.timeSentUs);
     }
-    //TODO NOTE using mod of espNowSend which sends to specific or broadcast
+    //TODO NOTE see start of code, using mod of espNowSend which can send to specific or broadcast
     p2p->sendCnt++;
     espNowSend(p2p->cnc.otherMac, (const uint8_t*)msg, len);
 }
@@ -637,12 +643,12 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
     }
 
     // If this message has a MAC, check it
-    if(len >= ets_strlen(p2p->startMsg) &&
-            0 != ets_memcmp(&data[MAC_IDX], p2p->macStr, ets_strlen(p2p->macStr)))
+    if(len >= sizeof(p2p->startMsg) - 1 &&
+            0 != ets_memcmp(&data[MAC_IDX], p2p->macStr, sizeof(p2p->macStr) - 1))
     {
         // This MAC isn't for us
 #ifdef SHOW_DISCARD
-        p2p_printf("DISCARD: Not for our MAC len=%d ets_strlen(p2p->startMsg)=%d\r\n", len, ets_strlen(p2p->startMsg) );
+        p2p_printf("DISCARD: Not for our MAC len=%d sizeof(p2p->startMsg)-1=%d\r\n", len, sizeof(p2p->startMsg) - 1 );
 #endif
         return;
     }
@@ -713,7 +719,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
 
     // Let the mode handle RESTART message
     // The mode should reset to state as if just started with no button pushes
-    if(len >= ets_strlen(p2p->ackMsg) &&
+    if(len >= sizeof(p2p->ackMsg) - 1 &&
             0 == ets_memcmp(&data[CMD_IDX], "rst", ets_strlen("rst")))
     {
         if(NULL != p2p->msgRxCbFn)
@@ -810,7 +816,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
     // All messages come here (con, ack, others that needed acking)
     // After ACKing the message, check the sequence number to see if we should
     // process it or ignore it (we already did!)
-    if(len >= ets_strlen(p2p->startMsg))
+    if(len >= sizeof(p2p->startMsg) - 1)
     {
         // TODO fix using hex seq numbers
         // Extract the sequence number
@@ -843,10 +849,10 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
     // ACKs can be received in any state
     if(p2p->ack.isWaitingForAck)
     {
-        // p2p_printf("Checking if ACK len=%d, ets_strlen(p2p->ackMsg)=%d %s %s\r\n", len, ets_strlen(p2p->ackMsg), data,
+        // p2p_printf("Checking if ACK len=%d, sizeof(p2p->ackMsg)-1=%d %s %s\r\n", len, sizeof(p2p->ackMsg)-1, data,
         //            p2p->ackMsg);
         // Check if this is an ACK
-        if(ets_strlen(p2p->ackMsg) <= len &&
+        if(sizeof(p2p->ackMsg) - 1 <= len &&
                 0 == ets_memcmp(data, p2p->ackMsg, INITIAL_PART))
         {
             p2p_printf("ACK Received so return\r\n");
@@ -888,7 +894,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
                          p2p->msgId, p2p->cnc.otherSide, p2p->ringSeq);
             if(!p2p->cnc.broadcastReceived &&
                     rssi > p2p->connectionRssi &&
-                    ets_strlen(p2p->conMsg) == len &&
+                    sizeof(p2p->conMsg) - 1 == len &&
                     // ignore last 2 char which is ringSeq
                     0 == ets_memcmp(data, conMsgSought, len - 2))
             {
@@ -928,19 +934,19 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
                             );
 
                 // If it's acked, call p2pGameStartAckRecv(), if not reinit with p2pRestart()
-                p2pSendMsgEx(p2p, p2p->startMsg, ets_strlen(p2p->startMsg), true, p2pGameStartAckRecv, p2pRestart);
+                p2pSendMsgEx(p2p, p2p->startMsg, sizeof(p2p->startMsg) - 1, true, p2pGameStartAckRecv, p2pRestart);
                 return;
             }
 
             if (!p2p->cnc.rxGameStartMsg &&
-                    ets_strlen(p2p->startMsg) <= len &&
+                    sizeof(p2p->startMsg) - 1 <= len &&
                     0 == ets_memcmp(data, p2p->startMsg, INITIAL_PART) &&
                     p2p->cnc.otherSide + '0' == data[SIDE_IDX + 1])
             {
 
                 // Received a str message response to our broadcast
-                p2p_printf("Game start message received (was acked)\n %s ets_strlen(p2p->startMsg)=%d, len=%d, data=%s, p2p->cnc.otherSide=%d\n",
-                           p2p->cnc.rxGameStartMsg ? "RX GAME START" : "HAVENT GOT RX GAME START", ets_strlen(p2p->startMsg), len, data,
+                p2p_printf("Game start message received (was acked)\n %s sizeof(p2p->startMsg)-1=%d, len=%d, data=%s, p2p->cnc.otherSide=%d\n",
+                           p2p->cnc.rxGameStartMsg ? "RX GAME START" : "HAVENT GOT RX GAME START", sizeof(p2p->startMsg) - 1, len, data,
                            p2p->cnc.otherSide);
 
                 // This is another swadge trying to start a game, which means
@@ -1014,7 +1020,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
                          p2p->ringSeq
                         );
             // TODO gave no callbacks, can get by with no ack request?
-            p2pSendMsgEx(p2p, p2p->startMsg, ets_strlen(p2p->startMsg), true, NULL, NULL);
+            p2pSendMsgEx(p2p, p2p->startMsg, sizeof(p2p->startMsg) - 1, true, NULL, NULL);
             // TODO  check why return can be left out and still ok
             return;
         }
@@ -1065,9 +1071,9 @@ void ICACHE_FLASH_ATTR p2pSendAckToMac(p2pInfo* p2p, uint8_t* mac_addr, uint8_t*
                  p2p->ringSeq,
                  data
                 );
-    //TODO this didn't work when ackMsg was 32 chars
-    p2p_printf("p2p->ackMsg %s len=%d\n", p2p->ackMsg, ets_strlen(p2p->ackMsg));
-    p2pSendMsgEx(p2p, p2p->ackMsg, ets_strlen(p2p->ackMsg), false, NULL, NULL);
+    //TODO check
+    p2p_printf("p2p->ackMsg %s len=%d\n", p2p->ackMsg, 34 + ets_strlen(data));
+    p2pSendMsgEx(p2p, p2p->ackMsg, 34 + ets_strlen(data), false, NULL, NULL);
 }
 
 /**
@@ -1244,7 +1250,6 @@ void ICACHE_FLASH_ATTR p2pRestart(void* arg)
  */
 void ICACHE_FLASH_ATTR p2pSendCb(p2pInfo* p2p, uint8_t* recipient_mac_addr, mt_tx_status status, uint16_t sendCbCnt)
 {
-#define TEST_SENDCNT
 #ifdef TEST_SENDCNT
     p2p_printf("SendCb %d p2p->sendCnt = %d\r\n", sendCbCnt, p2p->sendCnt);
     if (p2p->sendCnt == 0)

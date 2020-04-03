@@ -43,7 +43,7 @@ typedef struct _p2pInfo
     // size needs to be 1 more than longest string (to hold NULL terminator)
     char msgId[4];
     char conMsg[13];
-    char ackMsg[75];
+    char ackMsg[90]; //TODO changed
     char startMsg[35];
 
     // identifiers

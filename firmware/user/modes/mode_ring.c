@@ -281,7 +281,7 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
                     // Send a message via the connection with hue
                     char testMsg[256] = {0};
                     ets_sprintf(testMsg, "%02X is the hue", randomHue);
-                    p2pSendMsg(&(connections[idx]), "tst", testMsg, sizeof(testMsg),
+                    p2pSendMsg(&(connections[idx]), "tst", testMsg, ets_strlen(testMsg),
                                ringMsgTxCbFn);
                 }
                 break;
