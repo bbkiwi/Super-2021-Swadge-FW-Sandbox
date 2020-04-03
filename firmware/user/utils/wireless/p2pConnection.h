@@ -89,6 +89,7 @@ typedef struct _p2pInfo
         uint8_t otherMac[6];
         button_mask otherSide;
         uint8_t otherRssi; // rssi when it connected
+        uint8_t msgRepeatCnt;
         uint8_t mySeqNum;
         uint8_t lastSeqNum;
     } cnc;

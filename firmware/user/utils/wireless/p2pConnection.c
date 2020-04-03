@@ -2,6 +2,11 @@
 // TODO side and otherSide could be renamed socket and otherSocket
 // TODO Why acking all messages, test code that only acks first of sequence of duplicates
 //      rather than all
+// Added cnc.msgRepeatCnt so when get repeat messages can see if any get missed
+// TODO using 1 byte (char) for cnc.mySeqNum; and cnc.msgRepeatCnt. Using str
+//    op to make message and testing str length will cause problem is the byte
+//    is ever zero as thinks this is end of string and gets length wrong.
+//    maybe make len part of header of message
 
 /*============================================================================
  * Includes
@@ -45,6 +50,8 @@
 // Indices into messages
 #define CMD_IDX 4
 #define SEQ_IDX 8
+#define INITIAL_PART 8
+#define MSG_REPEAT_NUM 9
 #define MAC_IDX 11
 #define EXT_IDX 29
 #define RING_SEQ_IDX 32
@@ -63,10 +70,10 @@ const char p2pConnectionMsgFmt[] = "%s_con_%1X_%02X";
 
 // TODO why 31 need to extend
 // Needs to be 31 chars or less!
-const char p2pNoPayloadMsgFmt[]  = "%s_%s_%02d_%02X:%02X:%02X:%02X:%02X:%02X_%1X%1X_%02X";
+const char p2pNoPayloadMsgFmt[]  = "%s_%s_%c%c_%02X:%02X:%02X:%02X:%02X:%02X_%1X%1X_%02X";
 
 // Needs to be 63 chars or less!
-const char p2pPayloadMsgFmt[]    = "%s_%s_%02d_%02X:%02X:%02X:%02X:%02X:%02X_%1X%1X_%02X_%s";
+const char p2pPayloadMsgFmt[]    = "%s_%s_%c%c_%02X:%02X:%02X:%02X:%02X:%02X_%1X%1X_%02X_%s";
 const char p2pMacFmt[] = "%02X:%02X:%02X:%02X:%02X:%02X";
 
 /*============================================================================
@@ -115,9 +122,14 @@ void ICACHE_FLASH_ATTR p2pInitialize(p2pInfo* p2p, char* msgId,
     p2p->msgRxCbFn = msgRxCbFn;
 
     // Set the initial sequence number at 255 so that a 0 received is valid.
-    p2p->cnc.lastSeqNum = 255;
-    //TODO remove laster now start at 0
+    p2p->cnc.lastSeqNum = 0x7A;
+    p2p->cnc.mySeqNum = 0x30;
+    p2p->cnc.msgRepeatCnt = 0x30;
+
+
+    //TODO remove later when can start at 0
     p2p->ringSeq = 0x7F;
+
     // Set the connection Rssi, higher value, swadges need to be close
     p2p->connectionRssi = connectionRssi;
 
@@ -143,7 +155,8 @@ void ICACHE_FLASH_ATTR p2pInitialize(p2pInfo* p2p, char* msgId,
     ets_snprintf(p2p->ackMsg, sizeof(p2p->ackMsg), p2pNoPayloadMsgFmt,
                  p2p->msgId,
                  "ack",
-                 0,
+                 0x30,
+                 0x30,
                  0xFF,
                  0xFF,
                  0xFF,
@@ -159,7 +172,8 @@ void ICACHE_FLASH_ATTR p2pInitialize(p2pInfo* p2p, char* msgId,
     ets_snprintf(p2p->startMsg, sizeof(p2p->startMsg), p2pNoPayloadMsgFmt,
                  p2p->msgId,
                  "str",
-                 0,
+                 0x30,
+                 0x30,
                  0xFF,
                  0xFF,
                  0xFF,
@@ -398,7 +412,8 @@ void ICACHE_FLASH_ATTR p2pSendMsg(p2pInfo* p2p, char* msg, char* payload,
         ets_snprintf(builtMsg, sizeof(builtMsg), p2pNoPayloadMsgFmt,
                      p2p->msgId,
                      msg,
-                     0, // sequence number
+                     0x30, // sequence number
+                     0x30,
                      p2p->cnc.otherMac[0],
                      p2p->cnc.otherMac[1],
                      p2p->cnc.otherMac[2],
@@ -414,7 +429,8 @@ void ICACHE_FLASH_ATTR p2pSendMsg(p2pInfo* p2p, char* msg, char* payload,
         ets_snprintf(builtMsg, sizeof(builtMsg), p2pPayloadMsgFmt,
                      p2p->msgId,
                      msg,
-                     0, // sequence number, filled in later
+                     0x30, // sequence number, filled in later
+                     0x30,
                      p2p->cnc.otherMac[0],
                      p2p->cnc.otherMac[1],
                      p2p->cnc.otherMac[2],
@@ -482,28 +498,46 @@ void ICACHE_FLASH_ATTR p2pSendMsgEx(p2pInfo* p2p, char* msg, uint16_t len,
     //p2p_printf("%s,%s\r\n", p2p->msgId, msg);
     p2p_printf("%s %s\r\n", p2p->msgId, p2p->side == LEFT ? "LEFT" : "RIGHT");
     // If this is a first time message and longer than a connection message
-    if( (p2p->ack.msgToAck != msg) && ets_strlen(p2p->conMsg) < len)
+    // TODO note the assumption is that all messages longer than con will be acked
+    // If want to be able to broadcast long messages will need to change this
+    if (ets_strlen(p2p->conMsg) < len)
     {
-        //ets_memcpy(p2p->cnc.otherMac, msg[MAC_IDX], sizeof(p2p->cnc.otherMac));
-        p2p->cnc.otherMacReceived = true;
-        for (uint8_t i = 0; i < 6; i++)
+        if(p2p->ack.msgToAck != msg)
         {
-            p2p->cnc.otherMac[i] = 16 * p2pHex2Int(msg[MAC_IDX + 3 * i]) + p2pHex2Int(msg[MAC_IDX + 3 * i + 1]);
-        }
-        // TODO have sequence number %02X 00 to FF
-        // Insert a sequence number
-        msg[SEQ_IDX + 0] = '0' + (p2p->cnc.mySeqNum / 10);
-        msg[SEQ_IDX + 1] = '0' + (p2p->cnc.mySeqNum % 10);
+            // TODO is there better place for this code? When send str? and/or when receive con
+            // save otherMac the first time we need to send
+            if (!p2p->cnc.otherMacReceived)
+            {
+                p2p->cnc.otherMacReceived = true;
+                for (uint8_t i = 0; i < 6; i++)
+                {
+                    p2p->cnc.otherMac[i] = 16 * p2pHex2Int(msg[MAC_IDX + 3 * i]) + p2pHex2Int(msg[MAC_IDX + 3 * i + 1]);
+                }
+            }
+            // Sequence number 1 byte 0 to 0xFF
+            // Insert a sequence number
+            msg[SEQ_IDX ] = p2p->cnc.mySeqNum;
 
-        // Increment the sequence number, 0-99
-        p2p->cnc.mySeqNum++;
-        // TODO can just rely on uint8_t overflow now
-        // TODO the ++ is bug and causes jumps of 2
-        //if(100 == p2p->cnc.mySeqNum++)
-        if(100 == p2p->cnc.mySeqNum)
-        {
-            p2p->cnc.mySeqNum = 0;
+            // Increment the sequence number
+            //p2p->cnc.mySeqNum++;
+            if (p2p->cnc.mySeqNum++ > 0x7A)
+            {
+                p2p->cnc.mySeqNum = 0x30;
+            }
+
+
+            //TODO can't handle 0x00 with string op as thinks terminates so limit to nice printing chars
+            // Set repeat counter to zero
+            p2p->cnc.msgRepeatCnt = 0x30;
         }
+        else
+        {
+            if (p2p->cnc.msgRepeatCnt++ > 0x7A)
+            {
+                p2p->cnc.msgRepeatCnt = 0x30;
+            }
+        }
+        msg[MSG_REPEAT_NUM] = p2p->cnc.msgRepeatCnt;
     }
 
 #ifdef P2P_DEBUG_PRINT
@@ -608,7 +642,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
     {
         // This MAC isn't for us
 #ifdef SHOW_DISCARD
-        p2p_printf("DISCARD: Not for our MAC\r\n");
+        p2p_printf("DISCARD: Not for our MAC len=%d ets_strlen(p2p->startMsg)=%d\r\n", len, ets_strlen(p2p->startMsg) );
 #endif
         return;
     }
@@ -704,7 +738,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
     //       either a connection request broadcast or for message for us.
     //If not a con broadcast or for us and not an ack message
     if(0 != ets_memcmp(data, p2p->conMsg, CON_SIDE_IDX) &&
-            0 != ets_memcmp(data, p2p->ackMsg, SEQ_IDX))
+            0 != ets_memcmp(data, p2p->ackMsg, INITIAL_PART))
     {
 #ifdef HANDLE_MSG_TO_RESTARTED_SWADGE
         // p2p needs repairing if we are not actually connected
@@ -780,10 +814,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
     {
         // TODO fix using hex seq numbers
         // Extract the sequence number
-        uint8_t theirSeq = 0;
-        theirSeq += (data[SEQ_IDX + 0] - '0')
-                    * 10;
-        theirSeq += (data[SEQ_IDX + 1] - '0');
+        uint8_t theirSeq = data[SEQ_IDX];
 
         // Check it against the last known sequence number
         if(theirSeq == p2p->cnc.lastSeqNum)
@@ -816,7 +847,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
         //            p2p->ackMsg);
         // Check if this is an ACK
         if(ets_strlen(p2p->ackMsg) <= len &&
-                0 == ets_memcmp(data, p2p->ackMsg, SEQ_IDX))
+                0 == ets_memcmp(data, p2p->ackMsg, INITIAL_PART))
         {
             p2p_printf("ACK Received so return\r\n");
             // TODO fix Adam's code as this is prob missing from his
@@ -883,7 +914,8 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
                 ets_snprintf(p2p->startMsg, sizeof(p2p->startMsg), p2pNoPayloadMsgFmt,
                              p2p->msgId,
                              "str",
-                             0,
+                             0x30,
+                             0x30,
                              senders_mac_addr[0],
                              senders_mac_addr[1],
                              senders_mac_addr[2],
@@ -902,7 +934,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
 
             if (!p2p->cnc.rxGameStartMsg &&
                     ets_strlen(p2p->startMsg) <= len &&
-                    0 == ets_memcmp(data, p2p->startMsg, SEQ_IDX) &&
+                    0 == ets_memcmp(data, p2p->startMsg, INITIAL_PART) &&
                     p2p->cnc.otherSide + '0' == data[SIDE_IDX + 1])
             {
 
@@ -967,7 +999,8 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
             ets_snprintf(p2p->startMsg, sizeof(p2p->startMsg), p2pNoPayloadMsgFmt,
                          p2p->msgId,
                          "rst",
-                         0,
+                         0x30,
+                         0x30,
                          senders_mac_addr[0],
                          senders_mac_addr[1],
                          senders_mac_addr[2],
@@ -1019,7 +1052,8 @@ void ICACHE_FLASH_ATTR p2pSendAckToMac(p2pInfo* p2p, uint8_t* mac_addr, uint8_t*
     ets_snprintf(p2p->ackMsg, sizeof(p2p->ackMsg), p2pPayloadMsgFmt,
                  p2p->msgId,
                  "ack",
-                 0,
+                 0x30,
+                 0x30,
                  mac_addr[0],
                  mac_addr[1],
                  mac_addr[2],
@@ -1103,12 +1137,17 @@ void ICACHE_FLASH_ATTR p2pProcConnectionEvt(p2pInfo* p2p, connectionEvt_t event)
             p2p->cnc.rxGameStartAck = true;
             break;
         }
+
+        case CON_LOST:
+        case CON_STOPPED:
+        {
+            p2p->cnc.otherMacReceived = false;
+            break;
+        }
         case CON_BROADCAST_STARTED:
         case CON_LISTENING_STARTED:
         case RX_BROADCAST:
         case CON_ESTABLISHED:
-        case CON_LOST:
-        case CON_STOPPED:
         default:
         {
             break;
