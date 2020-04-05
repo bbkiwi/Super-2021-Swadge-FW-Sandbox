@@ -457,9 +457,9 @@ void ICACHE_FLASH_ATTR p2pSendMsg(p2pInfo* p2p, char* msg, char* payload,
 
     p2p->msgTxCbFn = msgTxCbFn;
     //TODO this could be a problem, maybe if payload (which is for user) is string
-    // compute length as 34 + ets_strlen(payload) instead of ets_strlen(builtMsg)
+    // compute length as 34 + 1 + ets_strlen(payload) instead of ets_strlen(builtMsg)
     p2p_printf("ets_strlen(payload)=%d, builtMsg %s\n", ets_strlen(payload), builtMsg);
-    p2pSendMsgEx(p2p, builtMsg, 34 + ets_strlen(payload), true, p2pModeMsgSuccess, p2pModeMsgFailure);
+    p2pSendMsgEx(p2p, builtMsg, 35 + ets_strlen(payload), true, p2pModeMsgSuccess, p2pModeMsgFailure);
 }
 
 /**
@@ -581,7 +581,7 @@ void ICACHE_FLASH_ATTR p2pSendMsgEx(p2pInfo* p2p, char* msg, uint16_t len,
         // Mark the time this transmission started, the retry timer gets
         // started in p2pSendCb()
         p2p->ack.timeSentUs = system_get_time();
-        p2p_printf("   time started %d\n", p2p->ack.timeSentUs);
+        p2p_printf("   time started %u\n", p2p->ack.timeSentUs);
     }
     //TODO NOTE see start of code, using mod of espNowSend which can send to specific or broadcast
     p2p->sendCnt++;
@@ -814,9 +814,9 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
     }
 
     // All messages come here (con, ack, others that needed acking)
-    // After ACKing the message, check the sequence number to see if we should
-    // process it or ignore it (we already did!)
-    if(len >= sizeof(p2p->startMsg) - 1)
+    // Those that needed it were ACKed the message
+    // Check the sequence number to see if we should process it or ignore it (we already did!)
+    if(len >= sizeof(p2p->startMsg) - 1) // these are not broadcasts and have seq numbers
     {
         // TODO fix using hex seq numbers
         // Extract the sequence number
@@ -852,7 +852,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
         // p2p_printf("Checking if ACK len=%d, sizeof(p2p->ackMsg)-1=%d %s %s\r\n", len, sizeof(p2p->ackMsg)-1, data,
         //            p2p->ackMsg);
         // Check if this is an ACK
-        if(sizeof(p2p->ackMsg) - 1 <= len &&
+        if(INITIAL_PART <= len &&
                 0 == ets_memcmp(data, p2p->ackMsg, INITIAL_PART))
         {
             p2p_printf("ACK Received so return\r\n");
@@ -873,6 +873,10 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
             {
                 successFn(p2p);
             }
+        }
+        else
+        {
+            p2p_printf("ACK NOT Received so continue waiting\r\n");
         }
         // Don't process anything else when waiting or processing an ack
         return;
@@ -1072,8 +1076,8 @@ void ICACHE_FLASH_ATTR p2pSendAckToMac(p2pInfo* p2p, uint8_t* mac_addr, uint8_t*
                  data
                 );
     //TODO check
-    p2p_printf("p2p->ackMsg %s len=%d\n", p2p->ackMsg, 34 + ets_strlen(data));
-    p2pSendMsgEx(p2p, p2p->ackMsg, 34 + ets_strlen(data), false, NULL, NULL);
+    p2p_printf("p2p->ackMsg %s len=%d\n", p2p->ackMsg, 35 + ets_strlen((const char*)data));
+    p2pSendMsgEx(p2p, p2p->ackMsg, 35 + ets_strlen((const char*)data), false, NULL, NULL);
 }
 
 /**
@@ -1300,7 +1304,7 @@ void ICACHE_FLASH_ATTR p2pSendCb(p2pInfo* p2p, uint8_t* recipient_mac_addr, mt_t
                p2p->msgId, p2p->side == LEFT ? "LEFT" : "RIGHT",
                status == MT_TX_STATUS_OK ? "OK" : (status == MT_TX_STATUS_FAILED ? "FAILED" : "UNKNOWN"));
     p2pDumpInfo(p2p);
-    p2p_printf("   p2p->ack.timeSentUs = %d us)\r\n", p2p->ack.timeSentUs);
+    p2p_printf("   (p2p->ack.timeSentUs = %u us)\r\n", p2p->ack.timeSentUs);
     switch(status)
     {
         case MT_TX_STATUS_OK:

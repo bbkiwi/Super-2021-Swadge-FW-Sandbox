@@ -156,10 +156,10 @@ void ICACHE_FLASH_ATTR ringEnterMode(void)
     os_timer_setfn(&ringAnimationTimer, ringAnimation, NULL);
     os_timer_arm(&ringAnimationTimer, 50, true);
 
-    // Set up a timer to scroll the instructions
+    // Set up a timer to refresh display thus scroll the instructions
     os_timer_disarm(&scrollLastMsgTimer);
     os_timer_setfn(&scrollLastMsgTimer, ringScrollLastMsg, NULL);
-    os_timer_arm(&scrollLastMsgTimer, 34, true);
+    os_timer_arm(&scrollLastMsgTimer, 50, true);
 
     // Set up a timer to determin long press of button
     os_timer_disarm(&ringLongPressTimerTimer);
@@ -507,6 +507,10 @@ void ICACHE_FLASH_ATTR ringMsgTxCbFn(p2pInfo* p2p, messageStatus_t status)
             getRingConnection(p2p)->cnc.isConnected = false;
             //TODO check
             getRingConnection(p2p)->cnc.isConnecting = false; // needed?
+            getRingConnection(p2p)->cnc.broadcastReceived = false;
+            getRingConnection(p2p)->cnc.rxGameStartAck = false;
+            getRingConnection(p2p)->cnc.rxGameStartMsg = false;
+            getRingConnection(p2p)->cnc.otherMacReceived = false;
             break;
         }
         default:
@@ -581,7 +585,7 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
     plotText(45, 0, &connections[0].macStr[12], IBM_VGA_8, WHITE);
 
 
-    // Draw lastMsg ticker
+    // Draw lastMsg ticker ringLastMsgTextIdx counts down by 1 every 50ms
     int16_t plotTextOut = plotText(ringLastMsgTextIdx, 12, lastMsg, IBM_VGA_8, WHITE);
     // repeat text again, so gives continuous scroll of text
     plotText(SCROLL_GAP + plotTextOut, 12, lastMsg, IBM_VGA_8, WHITE);
@@ -589,7 +593,6 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
     {
         ringLastMsgTextIdx = SCROLL_GAP;
     }
-    //plotText(6, 12, lastMsg, IBM_VGA_8, WHITE);
 
     for(i = 0; i < lengthof(connections); i++)
     {
@@ -696,7 +699,6 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
 void ICACHE_FLASH_ATTR ringScrollLastMsg(void* arg __attribute__((unused)))
 {
     ringLastMsgTextIdx--;
-    ringUpdateDisplay();
 }
 
 /**
@@ -706,9 +708,6 @@ void ICACHE_FLASH_ATTR ringScrollLastMsg(void* arg __attribute__((unused)))
  */
 void ICACHE_FLASH_ATTR ringAnimation(void* arg __attribute__((unused)))
 {
-    // Keep track if we should update the OLED
-    bool shouldUpdate = false;
-
     // If the radius is nonzero
     if(radiusLeft > 0)
     {
@@ -720,8 +719,6 @@ void ICACHE_FLASH_ATTR ringAnimation(void* arg __attribute__((unused)))
             // Stop drawing the circle
             radiusLeft = 0;
         }
-        // The OLED should be updated
-        shouldUpdate = true;
     }
 
     // If the radius is nonzero
@@ -735,16 +732,9 @@ void ICACHE_FLASH_ATTR ringAnimation(void* arg __attribute__((unused)))
             // Stop drawing the circle
             radiusRight = 0;
         }
-        // The OLED should be updated
-        shouldUpdate = true;
     }
-
-    // If there were any changes
-    if(shouldUpdate)
-    {
-        // Update the OLED
-        ringUpdateDisplay();
-    }
+    // Update OLED
+    ringUpdateDisplay();
 }
 
 /**
@@ -787,6 +777,6 @@ void ICACHE_FLASH_ATTR ringLongPressTimerFunc(void* arg __attribute__((unused)))
  */
 void ICACHE_FLASH_ATTR ringAccelerometerCallback(accel_t* accel __attribute__((unused)))
 {
-    ringUpdateDisplay();
+    //Doing nothing here
     return;
 }
