@@ -50,12 +50,16 @@
  * Function Prototypes
  *============================================================================*/
 
+/*==============================================================================
+ * Function Prototypes
+ *============================================================================*/
+
 void ringEnterMode(void);
 void ringExitMode(void);
 void ringButtonCallback(uint8_t state, int button, int down);
-void ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_t len, uint8_t rssi);
+void ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_t len,
+                      uint8_t rssi);
 void ringEspNowSendCb(uint8_t* mac_addr, mt_tx_status status);
-void ringAccelerometerCallback(accel_t* accel);
 
 void ringConCbFn(p2pInfo* p2p, connectionEvt_t);
 void ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, uint8_t len);
@@ -105,7 +109,7 @@ swadgeMode ringMode =
     .wifiMode = ESP_NOW,
     .fnEspNowRecvCb = ringEspNowRecvCb,
     .fnEspNowSendCb = ringEspNowSendCb,
-    .fnAccelerometerCallback = ringAccelerometerCallback
+    .fnAccelerometerCallback = NULL
 };
 
 p2pInfo connections[2];
@@ -114,16 +118,15 @@ button_mask connectionSide;
 
 char lastMsg[256];
 
-os_timer_t ringAnimationTimer;
-os_timer_t scrollLastMsgTimer;
-os_timer_t ringLongPressTimerTimer;
+syncedTimer_t ringAnimationTimer;
+syncedTimer_t scrollLastMsgTimer;
+syncedTimer_t ringLongPressTimerTimer;
 uint8_t radiusLeft = 0;
 uint8_t radiusRight = 0;
 uint8_t ringHueRight;
 uint8_t ringHueLeft;
 // TODO this is number assigned to swadge so maybe should be computed in this mode
 uint8_t ringSeq;
-
 
 /*==============================================================================
  * Functions
@@ -152,18 +155,18 @@ void ICACHE_FLASH_ATTR ringEnterMode(void)
     enableDebounce(false);
 
     // Set up an animation timer
-    os_timer_disarm(&ringAnimationTimer);
-    os_timer_setfn(&ringAnimationTimer, ringAnimation, NULL);
-    os_timer_arm(&ringAnimationTimer, 50, true);
+    syncedTimerDisarm(&ringAnimationTimer);
+    syncedTimerSetFn(&ringAnimationTimer, ringAnimation, NULL);
+    syncedTimerArm(&ringAnimationTimer, 50, true);
 
     // Set up a timer to refresh display thus scroll the instructions
-    os_timer_disarm(&scrollLastMsgTimer);
-    os_timer_setfn(&scrollLastMsgTimer, ringScrollLastMsg, NULL);
-    os_timer_arm(&scrollLastMsgTimer, 50, true);
+    syncedTimerDisarm(&scrollLastMsgTimer);
+    syncedTimerSetFn(&scrollLastMsgTimer, ringScrollLastMsg, NULL);
+    syncedTimerArm(&scrollLastMsgTimer, 50, true);
 
     // Set up a timer to determin long press of button
-    os_timer_disarm(&ringLongPressTimerTimer);
-    os_timer_setfn(&ringLongPressTimerTimer, ringLongPressTimerFunc, NULL);
+    syncedTimerDisarm(&ringLongPressTimerTimer);
+    syncedTimerSetFn(&ringLongPressTimerTimer, ringLongPressTimerFunc, NULL);
 
     // Draw the initial display
     ringUpdateDisplay();
@@ -186,9 +189,9 @@ void ICACHE_FLASH_ATTR ringExitMode(void)
     {
         p2pDeinit(&connections[i]);
     }
-    os_timer_disarm(&ringAnimationTimer);
-    os_timer_disarm(&scrollLastMsgTimer);
-    os_timer_disarm(&ringLongPressTimerTimer);
+    syncedTimerDisarm(&ringAnimationTimer);
+    syncedTimerDisarm(&scrollLastMsgTimer);
+    syncedTimerDisarm(&ringLongPressTimerTimer);
 }
 
 /**
@@ -199,19 +202,20 @@ void ICACHE_FLASH_ATTR ringExitMode(void)
  * @param button The button that changed state
  * @param down   true if the button was pressed, false if it was released
  */
-void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)), int button, int down)
+void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
+        int button, int down)
 {
     // If it was pressed
     if(down)
     {
         // Start a timer to specify  long press of button
-        os_timer_arm(&ringLongPressTimerTimer, 1000, false);
+        syncedTimerArm(&ringLongPressTimerTimer, 1000, false);
         ringLongPress = false;
     }
     else // Released
     {
         // Stop the timer no matter what
-        os_timer_disarm(&ringLongPressTimerTimer);
+        syncedTimerDisarm(&ringLongPressTimerTimer);
         switch(button)
         {
             default:
@@ -300,7 +304,8 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
  * @param len      The length of the data
  * @param rssi     The RSSI of th received message, a proxy for distance
  */
-void ICACHE_FLASH_ATTR ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_t len, uint8_t rssi)
+void ICACHE_FLASH_ATTR ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data,
+                                        uint8_t len, uint8_t rssi)
 {
     uint8_t i;
     recvCbCnt++;
@@ -635,7 +640,7 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
     }
 
     //Clear leds
-    memset(leds, 0, sizeof(leds));
+    ets_memset(leds, 0, sizeof(leds));
 
     if(radiusRight > 0)
     {

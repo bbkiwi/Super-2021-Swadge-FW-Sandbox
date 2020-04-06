@@ -13,7 +13,7 @@
 
 /**
  * @brief Draw a single character to the OLED display
- *        where characters must be >= ' '
+ *        Special characters (< ' ') not drawn
  * @param x The x position where to draw the character
  * @param y The y position where to draw the character
  * @param character The character to print
@@ -38,7 +38,7 @@ int16_t ICACHE_FLASH_ATTR plotChar(int16_t x, int16_t y,
 
 /**
  * @brief Draw a string to the display
- *        note special characters (< ' ') are ignored
+ *        Special characters (< ' ') skipped
  * @param x The x position where to draw the string
  * @param y The y position where to draw the string
  * @param text The string to draw
