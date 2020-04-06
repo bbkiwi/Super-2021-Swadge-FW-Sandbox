@@ -360,7 +360,7 @@ void ICACHE_FLASH_ATTR p2pTxRetryTimeout(void* arg)
 
     if(p2p->ack.msgToAckLen > 0)
     {
-        p2p_printf("Retrying message \"%s\"\n", p2p->ack.msgToAck);
+        p2p_printf("Retrying message \"%s\"\r\n", p2p->ack.msgToAck);
         p2pSendMsgEx(p2p, p2p->ack.msgToAck, p2p->ack.msgToAckLen, true, p2p->ack.SuccessFn, p2p->ack.FailureFn);
     }
 }
@@ -567,7 +567,7 @@ void ICACHE_FLASH_ATTR p2pSendMsgEx(p2pInfo* p2p, char* msg, uint16_t len,
         // If this is not a retry
         if(p2p->ack.msgToAck != msg)
         {
-            p2p_printf("sending for the first time\n");
+            p2p_printf("sending for the first time\r\n");
 
             // Store the message for potential retries
             ets_memcpy(p2p->ack.msgToAck, msg, len);
@@ -581,7 +581,7 @@ void ICACHE_FLASH_ATTR p2pSendMsgEx(p2pInfo* p2p, char* msg, uint16_t len,
         }
         else
         {
-            p2p_printf("this is a retry\n");
+            p2p_printf("this is a retry\r\n");
         }
 
         // Mark the time this transmission started, the retry timer gets
@@ -831,7 +831,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
         // Check it against the last known sequence number
         if(theirSeq == p2p->cnc.lastSeqNum)
         {
-            p2p_printf("DISCARD: Duplicate sequence number\n");
+            p2p_printf("DISCARD: Duplicate sequence number\r\n");
             return;
         }
         else
@@ -1040,7 +1040,7 @@ void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_
         // Let the mode handle it
         if(NULL != p2p->msgRxCbFn)
         {
-            p2p_printf("letting mode handle message\n");
+            p2p_printf("letting mode handle message\r\n");
             char msgType[4] = {0};
             memcpy(msgType, &data[CMD_IDX], 3 * sizeof(char));
             if (len > EXT_IDX)

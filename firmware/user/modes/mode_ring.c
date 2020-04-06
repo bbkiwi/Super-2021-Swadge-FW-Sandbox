@@ -50,15 +50,10 @@
  * Function Prototypes
  *============================================================================*/
 
-/*==============================================================================
- * Function Prototypes
- *============================================================================*/
-
 void ringEnterMode(void);
 void ringExitMode(void);
 void ringButtonCallback(uint8_t state, int button, int down);
-void ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_t len,
-                      uint8_t rssi);
+void ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_t len, uint8_t rssi);
 void ringEspNowSendCb(uint8_t* mac_addr, mt_tx_status status);
 
 void ringConCbFn(p2pInfo* p2p, connectionEvt_t);
@@ -70,6 +65,7 @@ void ringAnimation(void* arg __attribute__((unused)));
 void ringSetLeds(led_t* ledData, uint8_t ledDataLen);
 void ringScrollLastMsg(void* arg __attribute__((unused)));
 void ringLongPressTimerFunc(void* arg __attribute__((unused)));
+void ringAccelerometerCallback(accel_t* accel __attribute__((unused)));
 p2pInfo* getSideConnection(button_mask side);
 p2pInfo* getRingConnection(p2pInfo* p2p);
 
@@ -109,7 +105,7 @@ swadgeMode ringMode =
     .wifiMode = ESP_NOW,
     .fnEspNowRecvCb = ringEspNowRecvCb,
     .fnEspNowSendCb = ringEspNowSendCb,
-    .fnAccelerometerCallback = NULL
+    .fnAccelerometerCallback = ringAccelerometerCallback
 };
 
 p2pInfo connections[2];
@@ -202,8 +198,7 @@ void ICACHE_FLASH_ATTR ringExitMode(void)
  * @param button The button that changed state
  * @param down   true if the button was pressed, false if it was released
  */
-void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
-        int button, int down)
+void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)), int button, int down)
 {
     // If it was pressed
     if(down)
@@ -304,8 +299,7 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
  * @param len      The length of the data
  * @param rssi     The RSSI of th received message, a proxy for distance
  */
-void ICACHE_FLASH_ATTR ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data,
-                                        uint8_t len, uint8_t rssi)
+void ICACHE_FLASH_ATTR ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_t len, uint8_t rssi)
 {
     uint8_t i;
     recvCbCnt++;

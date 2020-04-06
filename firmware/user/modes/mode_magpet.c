@@ -181,7 +181,7 @@ void ICACHE_FLASH_ATTR magpetButtonCallback(uint8_t state __attribute__((unused)
 void ICACHE_FLASH_ATTR magpetEspNowRecvCb(uint8_t* mac_addr, uint8_t* data,
         uint8_t len, uint8_t rssi)
 {
-    p2pRecvCb(&connection, mac_addr, data, len, rssi);
+    p2pRecvCb(&connection, mac_addr, data, len, rssi, 0);
     magpetUpdateDisplay();
 }
 
@@ -195,7 +195,7 @@ void ICACHE_FLASH_ATTR magpetEspNowRecvCb(uint8_t* mac_addr, uint8_t* data,
 void ICACHE_FLASH_ATTR magpetEspNowSendCb(uint8_t* mac_addr, mt_tx_status status)
 {
     os_printf("%s::%d\n", __func__, __LINE__);
-    p2pSendCb(&connection, mac_addr, status);
+    p2pSendCb(&connection, mac_addr, status, 0);
     magpetUpdateDisplay();
 }
 
@@ -210,9 +210,14 @@ void ICACHE_FLASH_ATTR magpetConCbFn(p2pInfo* p2p, connectionEvt_t evt)
 {
     switch(evt)
     {
-        case CON_STARTED:
+        case CON_BROADCAST_STARTED:
         {
-            magpetPrintf("CON_STARTED\n");
+            magpetPrintf("CON_BROADCAST_STARTED\n");
+            break;
+        }
+        case CON_LISTENING_STARTED:
+        {
+            magpetPrintf("CON_LISTENING_STARTED\n");
             break;
         }
         case CON_STOPPED:
