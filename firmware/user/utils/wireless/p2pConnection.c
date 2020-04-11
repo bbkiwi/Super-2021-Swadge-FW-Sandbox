@@ -382,7 +382,12 @@ void ICACHE_FLASH_ATTR p2pTxAllRetriesTimeout(void* arg)
     p2p_printf("%s %s\r\n", p2p->msgId, p2p->side == LEFT ? "LEFT" : "RIGHT");
     // Disarm all timers
     syncedTimerDisarm(&p2p->tmr.TxRetry);
-    syncedTimerDisarm(&p2p->tmr.TxAllRetries);
+
+    //TODO BUG Disarming this timer whos cb is this routine will cause error
+    //syncedTimerDisarm(&p2p->tmr.TxAllRetries);
+    // This will prevent it from running however
+    // TODO really needed?
+    p2p->tmr.TxAllRetries.shouldRunCnt = 0;
 
     // Save the failure function
     void (*FailureFn)(void*) = p2p->ack.FailureFn;
