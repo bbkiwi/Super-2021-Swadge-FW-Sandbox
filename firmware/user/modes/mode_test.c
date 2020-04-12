@@ -476,7 +476,7 @@ void ICACHE_FLASH_ATTR testUpdateDisplay(void)
         // Right
         plotCircle(BTN_CTR_X + BTN_OFF, BTN_CTR_Y, BTN_RAD, WHITE);
     }
-    return;
+
     // Draw the banana
     plotSprite(50, 40, &rotating_banana[test.BananaIdx], WHITE);
 
