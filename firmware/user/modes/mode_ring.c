@@ -431,19 +431,30 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
  */
 void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, uint8_t len)
 {
+    char testMsg[256] = {0};
     if(0 == strcmp(msg, TST_LABEL))
     {
         if(RIGHT == getRingConnection(p2p)->side)
         {
             radiusRight = 1;
             ringHueRight = p2pHex2Int(payload[6]) * 16 + p2pHex2Int(payload[7]);
+            radiusLeft = 1;
+            ringHueLeft = ringHueRight;
             ring_printf("ringHueRight = %d\n", ringHueRight);
+            ets_sprintf(testMsg, "%02X is the hue", ringHueRight);
+            p2pSendMsg(&(connections[0]), "tst", testMsg, ets_strlen(testMsg),
+                       ringMsgTxCbFn);
         }
         else if(LEFT == getRingConnection(p2p)->side)
         {
             radiusLeft = 1;
             ringHueLeft = p2pHex2Int(payload[6]) * 16 + p2pHex2Int(payload[7]);
+            radiusRight = 1;
+            ringHueRight = ringHueLeft;
             ring_printf("ringHueLeft = %d\n", ringHueLeft);
+            ets_sprintf(testMsg, "%02X is the hue", ringHueLeft);
+            p2pSendMsg(&(connections[1]), "tst", testMsg, ets_strlen(testMsg),
+                       ringMsgTxCbFn);
         }
     }
     else if(0 == strcmp(msg, "rst"))
@@ -643,6 +654,9 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
         leds[LED_LOWER_RIGHT].r =  (colorToShow >>  0) & 0xFF;
         leds[LED_LOWER_RIGHT].g =  (colorToShow >>  8) & 0xFF;
         leds[LED_LOWER_RIGHT].b =  (colorToShow >>  16) & 0xFF;
+        leds[LED_UPPER_RIGHT].r =  (colorToShow >>  0) & 0xFF;
+        leds[LED_UPPER_RIGHT].g =  (colorToShow >>  8) & 0xFF;
+        leds[LED_UPPER_RIGHT].b =  (colorToShow >>  16) & 0xFF;
     }
     if(radiusLeft > 0)
     {
@@ -651,6 +665,9 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
         leds[LED_LOWER_LEFT].r =  (colorToShow >>  0) & 0xFF;
         leds[LED_LOWER_LEFT].g =  (colorToShow >>  8) & 0xFF;
         leds[LED_LOWER_LEFT].b =  (colorToShow >>  16) & 0xFF;
+        leds[LED_UPPER_LEFT].r =  (colorToShow >>  0) & 0xFF;
+        leds[LED_UPPER_LEFT].g =  (colorToShow >>  8) & 0xFF;
+        leds[LED_UPPER_LEFT].b =  (colorToShow >>  16) & 0xFF;
     }
 
     if (radiusLeft == 0 && radiusRight == 0)
