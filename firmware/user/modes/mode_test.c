@@ -46,6 +46,7 @@ void ICACHE_FLASH_ATTR testButtonCallback(uint8_t state __attribute__((unused)),
 void ICACHE_FLASH_ATTR testAccelerometerHandler(accel_t* accel);
 
 void ICACHE_FLASH_ATTR testUpdateDisplay(void);
+void ICACHE_FLASH_ATTR testScrolltestMsg(void* arg __attribute__((unused)));
 static void ICACHE_FLASH_ATTR testRotateBanana(void* arg __attribute__((unused)));
 static void ICACHE_FLASH_ATTR testLedFunc(void* arg __attribute__((unused)));
 static void ICACHE_FLASH_ATTR testAnimateSprite(void* arg __attribute__((unused)));
@@ -300,6 +301,9 @@ struct
     gifHandle gHandle;
 } test;
 
+
+syncedTimer_t scrolltestMsgTimer;
+int16_t testScrollIdx;
 /*============================================================================
  * Functions
  *==========================================================================*/
@@ -317,6 +321,11 @@ void ICACHE_FLASH_ATTR testEnterMode(void)
     // Test the buzzer
     // uint32_t songLen;
     // startBuzzerSong((song_t*)getAsset("carmen.rtl", &songLen), false);
+
+    // Set up a timer to refresh display thus scroll the instructions
+    syncedTimerDisarm(&scrolltestMsgTimer);
+    syncedTimerSetFn(&scrolltestMsgTimer, testScrolltestMsg, NULL);
+    syncedTimerArm(&scrolltestMsgTimer, 50, true);
 
     // Test the display with a rotating banana
     syncedTimerDisarm(&test.timerHandleBanana);
@@ -389,12 +398,37 @@ static void ICACHE_FLASH_ATTR testRotateBanana(void* arg __attribute__((unused))
 }
 
 /**
+ * @brief Decrement the index to draw the instructions at, then draw the menu
+ *
+ * @param arg unused
+ */
+void ICACHE_FLASH_ATTR testScrolltestMsg(void* arg __attribute__((unused)))
+{
+    testScrollIdx--;
+}
+
+
+/**
  * TODO
  */
 void ICACHE_FLASH_ATTR testUpdateDisplay(void)
 {
+
     // Clear the display
     clearDisplay();
+
+
+    // Scroll a title
+    // Draw lastMsg ticker ringLastMsgTextIdx counts down by 1 every 50ms
+    int16_t plotTextOut = plotText(testScrollIdx, 12,
+                                   "test mode is a mode for testing and hopefully the oled glitch will go and timers will work again", IBM_VGA_8, WHITE);
+    // repeat text again, so gives continuous scroll of text
+    plotText(30 + plotTextOut, 12,
+             "test mode is a mode for testing and hopefully the oled glitch will go and timers will work again", IBM_VGA_8, WHITE);
+    if (0 > plotTextOut)
+    {
+        testScrollIdx = 30;
+    }
 
     // Draw a title
     plotText(0, 0, "TEST MODE", RADIOSTARS, WHITE);
