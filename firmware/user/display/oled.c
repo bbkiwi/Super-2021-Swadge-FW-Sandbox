@@ -20,7 +20,7 @@
 //==============================================================================
 
 #define OLED_ADDRESS (0x78 >> 1)
-#define OLED_FREQ 800
+#define OLED_FREQ 400
 
 #define SSD1306_NUM_PAGES 8
 #define SSD1306_NUM_COLS 128
