@@ -13,6 +13,14 @@
  */
 int16_t ICACHE_FLASH_ATTR plotSprite(int16_t x, int16_t y, const sprite_t* p_sprite, color col)
 {
+    // Only attempt to plot the sprite if some of it will be in bounds
+    if(x >= OLED_WIDTH || x <= -p_sprite->width || y >= OLED_HEIGHT || y <= -p_sprite->height)
+    {
+        // no ploting needed as it is completely off the screen
+        // return end pos of where it would have been drawn
+        return x + p_sprite->width + 1;
+    }
+
     uint8_t xIdx, yIdx;
     color foreground, background;
 
@@ -42,6 +50,7 @@ int16_t ICACHE_FLASH_ATTR plotSprite(int16_t x, int16_t y, const sprite_t* p_spr
     // refactor this code if it works!!!
     // sprite_t sprite_ram = p_sprite[0]; // Used to copy 32 bits of flash contents to RAM where 8 bit accesses are allowed
     sprite_t sprite_ram;
+
     memcpy ( &sprite_ram, p_sprite, sizeof(sprite_t) );
     for (xIdx = 0; xIdx < sprite_ram.width; xIdx++)
     {
