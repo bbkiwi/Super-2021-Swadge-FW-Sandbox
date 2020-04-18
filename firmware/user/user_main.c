@@ -58,8 +58,8 @@ rtcMem_t;
  * Variables
  *==========================================================================*/
 
-static syncedTimer_t timerHandlePollAccel;
-static syncedTimer_t timerHandleReturnToMenu;
+static os_timer_t timerHandlePollAccel;
+static os_timer_t timerHandleReturnToMenu;
 
 os_event_t procTaskQueue[PROC_TASK_QUEUE_LEN] = {{0}};
 
@@ -198,9 +198,9 @@ void ICACHE_FLASH_ATTR user_init(void)
 #endif
     {
         // Start a software timer to run every 100ms
-        syncedTimerDisarm(&timerHandlePollAccel);
-        syncedTimerSetFn(&timerHandlePollAccel, pollAccel, NULL);
-        syncedTimerArm(&timerHandlePollAccel, 100, 1);
+        os_timer_disarm(&timerHandlePollAccel);
+        os_timer_setfn(&timerHandlePollAccel, pollAccel, NULL);
+        os_timer_arm(&timerHandlePollAccel, 100, 1);
     }
 
     // Initialize display
@@ -243,8 +243,8 @@ void ICACHE_FLASH_ATTR user_init(void)
     system_os_post(PROC_TASK_PRIO, 0, 0 );
 
     // Setup a software timer to return to the menu
-    syncedTimerDisarm(&timerHandleReturnToMenu);
-    syncedTimerSetFn(&timerHandleReturnToMenu, returnToMenuTimerFunc, NULL);
+    os_timer_disarm(&timerHandleReturnToMenu);
+    os_timer_setfn(&timerHandleReturnToMenu, returnToMenuTimerFunc, NULL);
 }
 
 /*============================================================================
@@ -359,7 +359,7 @@ static void ICACHE_FLASH_ATTR returnToMenuTimerFunc(void* arg __attribute__((unu
     {
         // Go back to the menu
         switchToSwadgeMode(0);
-        syncedTimerDisarm(&timerHandleReturnToMenu);
+        os_timer_disarm(&timerHandleReturnToMenu);
     }
 }
 
@@ -501,8 +501,8 @@ uint8_t ICACHE_FLASH_ATTR getSwadgeModes(swadgeMode***  modePtr)
  */
 void ICACHE_FLASH_ATTR setAccelPollTime(uint32_t pollTimeMs)
 {
-    syncedTimerDisarm(&timerHandlePollAccel);
-    syncedTimerArm(&timerHandlePollAccel, pollTimeMs, true);
+    os_timer_disarm(&timerHandlePollAccel);
+    os_timer_arm(&timerHandlePollAccel, pollTimeMs, true);
 }
 
 #else
@@ -561,12 +561,12 @@ void ICACHE_FLASH_ATTR swadgeModeButtonCallback(uint8_t state, int button, int d
         else if(down)
         {
             // Start drawing the progress bar
-            syncedTimerArm(&timerHandleReturnToMenu, 10, true);
+            os_timer_arm(&timerHandleReturnToMenu, 10, true);
         }
         else
         {
             // If it was released, stop drawing the progress bar and clear it
-            syncedTimerDisarm(&timerHandleReturnToMenu);
+            os_timer_disarm(&timerHandleReturnToMenu);
             zeroMenuBar();
         }
 #else
