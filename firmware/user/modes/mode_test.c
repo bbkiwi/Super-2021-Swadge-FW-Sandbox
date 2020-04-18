@@ -282,7 +282,7 @@ swadgeMode testMode =
     .wifiMode = SOFT_AP,
     .fnEspNowRecvCb = NULL,
     .fnEspNowSendCb = NULL,
-    .fnAccelerometerCallback = testAccelerometerHandler
+    .fnAccelerometerCallback = NULL
 };
 
 struct
