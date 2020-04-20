@@ -68,6 +68,7 @@ void ringLongPressTimerFunc(void* arg __attribute__((unused)));
 void ringAccelerometerCallback(accel_t* accel __attribute__((unused)));
 p2pInfo* getSideConnection(button_mask side);
 p2pInfo* getRingConnection(p2pInfo* p2p);
+void ringPassMsg(void* arg);
 
 /*==============================================================================
  * Variables
@@ -113,6 +114,7 @@ button_mask connectionSide;
 
 char lastMsg[256];
 
+syncedTimer_t ringPassTimer;
 syncedTimer_t ringAnimationTimer;
 syncedTimer_t scrollLastMsgTimer;
 syncedTimer_t ringLongPressTimerTimer;
@@ -264,6 +266,11 @@ void ICACHE_FLASH_ATTR ringButtonCallback(uint8_t state __attribute__((unused)),
 
                 else if  (connections[idx].cnc.isConnected)
                 {
+                    if (ringLongPress)
+                    {
+                        connections[idx].cnc.isConnected = false;
+                        return;
+                    }
                     // Light led with random hue on correct side
                     uint8_t randomHue = os_random();
                     if (side == LEFT)
@@ -321,6 +328,7 @@ void ICACHE_FLASH_ATTR ringEspNowSendCb(uint8_t* mac_addr, mt_tx_status status)
     uint8_t i;
     for(i = 0; i < lengthof(connections); i++)
     {
+        ring_printf("p2pSendCb for connection %d\n", i);
         p2pSendCb(&(connections[i]), mac_addr, status);
     }
     ringUpdateDisplay();
@@ -418,6 +426,21 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
     return;
 }
 
+
+/**
+ * Pass a message to the nbr
+ * Called by ringPassTimer
+ * @param p2p  The p2p struct to use
+ */
+void ICACHE_FLASH_ATTR  ringPassMsg(void* arg)
+{
+    char testMsg[256] = {0};
+    p2pInfo* p2p = (p2pInfo*)arg;
+    ets_sprintf(testMsg, "%02X is the hue", ringHueRight);
+    p2pSendMsg(p2p, "tst", testMsg, ets_strlen(testMsg),
+               ringMsgTxCbFn);
+}
+
 /**
  * Callback function when p2p receives a message. Draw a little animation if
  * the message is correct
@@ -429,7 +452,7 @@ void ICACHE_FLASH_ATTR ringConCbFn(p2pInfo* p2p, connectionEvt_t evt)
  */
 void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, uint8_t len)
 {
-    char testMsg[256] = {0};
+    //char testMsg[256] = {0};
     if(0 == strcmp(msg, TST_LABEL))
     {
         if(RIGHT == getRingConnection(p2p)->side)
@@ -439,9 +462,13 @@ void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, 
             radiusLeft = 1;
             ringHueLeft = ringHueRight;
             ring_printf("ringHueRight = %d\n", ringHueRight);
-            ets_sprintf(testMsg, "%02X is the hue", ringHueRight);
-            p2pSendMsg(&(connections[0]), "tst", testMsg, ets_strlen(testMsg),
-                       ringMsgTxCbFn);
+            //TODO explain why if immediately pass message to nbr sendCb is called
+            //  twice. Also reversing will cancel
+            //ets_sprintf(testMsg, "%02X is the hue", ringHueRight);
+            // p2pSendMsg(&(connections[0]), "tst", testMsg, ets_strlen(testMsg),
+            //            ringMsgTxCbFn);
+            syncedTimerSetFn(&ringPassTimer, ringPassMsg, &connections[0]);
+            syncedTimerArm(&ringPassTimer, 2000, false);
         }
         else if(LEFT == getRingConnection(p2p)->side)
         {
@@ -450,9 +477,11 @@ void ICACHE_FLASH_ATTR ringMsgRxCbFn(p2pInfo* p2p, char* msg, uint8_t* payload, 
             radiusRight = 1;
             ringHueRight = ringHueLeft;
             ring_printf("ringHueLeft = %d\n", ringHueLeft);
-            ets_sprintf(testMsg, "%02X is the hue", ringHueLeft);
-            p2pSendMsg(&(connections[1]), "tst", testMsg, ets_strlen(testMsg),
-                       ringMsgTxCbFn);
+            //ets_sprintf(testMsg, "%02X is the hue", ringHueLeft);
+            // p2pSendMsg(&(connections[1]), "tst", testMsg, ets_strlen(testMsg),
+            //            ringMsgTxCbFn);
+            syncedTimerSetFn(&ringPassTimer, ringPassMsg, &connections[1]);
+            syncedTimerArm(&ringPassTimer, 2000, false);
         }
     }
     else if(0 == strcmp(msg, "rst"))
@@ -668,7 +697,7 @@ void ICACHE_FLASH_ATTR ringUpdateDisplay(void)
         leds[LED_UPPER_LEFT].b =  (colorToShow >>  16) & 0xFF;
     }
 
-    if (radiusLeft == 0 && radiusRight == 0)
+    if (radiusLeft == 0 && radiusRight == 0 && (!connections[0].cnc.isConnected || !connections[1].cnc.isConnected))
     {
 
         for(i = 0; i < lengthof(connections); i++)

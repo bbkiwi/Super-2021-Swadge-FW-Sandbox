@@ -1281,11 +1281,12 @@ void ICACHE_FLASH_ATTR p2pSendCb(p2pInfo* p2p, uint8_t* recipient_mac_addr, mt_t
                      && (recipient_mac_addr[3] == 0xFF) && (recipient_mac_addr[4] == 0xFF) && (recipient_mac_addr[5] == 0xFF);
     if (broadcast)
     {
-        p2p_printf("SendCb %d to %s %s from a broadcast - do nothing\r\n", sendCbCnt, p2p->msgId,
-                   p2p->side == LEFT ? "LEFT" : "RIGHT");
+        p2p_printf("p2pEspSendId=%d, p2p->sendId = %d, to %s %s from a broadcast - do nothing\r\n", p2pEspSendId, p2p->sendId,
+                   p2p->msgId, p2p->side == LEFT ? "LEFT" : "RIGHT");
         return;
     }
-    p2p_printf("SendCb %d to %s %s from  %02X:%02X:%02X:%02X:%02X:%02X \r\n", sendCbCnt, p2p->msgId,
+    p2p_printf("p2pEspSendId=%d, p2p->sendId = %d, to %s %s from  %02X:%02X:%02X:%02X:%02X:%02X \r\n", p2pEspSendId,
+               p2p->sendId, p2p->msgId,
                p2p->side == LEFT ? "LEFT" : "RIGHT",
                recipient_mac_addr[0], recipient_mac_addr[1], recipient_mac_addr[2], recipient_mac_addr[3], recipient_mac_addr[4],
                recipient_mac_addr[5]);

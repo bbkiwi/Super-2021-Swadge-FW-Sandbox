@@ -24,7 +24,7 @@
 
 /// This is the MAC address to transmit to for broadcasting
 const uint8_t espNowBroadcastMac[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-
+uint16_t espCnt;
 /*============================================================================
  * Prototypes
  *==========================================================================*/
@@ -248,6 +248,7 @@ void ICACHE_FLASH_ATTR espNowSend(uint8_t* mac_addr, const uint8_t* data, uint8_
  */
 void ICACHE_FLASH_ATTR espNowSendCb(uint8_t* mac_addr, uint8_t status)
 {
+    os_printf("espNowSendCb espCnt = %d ", ++espCnt);
 #ifdef EXTRA_DEBUG
     os_printf("SEND MAC %02X:%02X:%02X:%02X:%02X:%02X\r\n",
               mac_addr[0],
