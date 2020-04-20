@@ -50,7 +50,7 @@ typedef struct _p2pInfo
     button_mask side;
     char macStr[18];
     uint8_t ringSeq;
-    int16_t sendCnt;
+    int16_t sendId;
 
     bool otherConnectionMade; // ok for 2 but if have more possible?
     //bool subsequentStartBroadcastFirst;
@@ -117,7 +117,7 @@ void ICACHE_FLASH_ATTR p2pStartConnectionListening(p2pInfo* p2p);
 void ICACHE_FLASH_ATTR p2pStopConnection(p2pInfo* p2p);
 
 void ICACHE_FLASH_ATTR p2pSendMsg(p2pInfo* p2p, char* msg, char* payload, uint16_t len, p2pMsgTxCbFn msgTxCbFn);
-void ICACHE_FLASH_ATTR p2pSendCb(p2pInfo* p2p, uint8_t* recipient_mac_addr, mt_tx_status status, uint16_t sendCbCnt);
+void ICACHE_FLASH_ATTR p2pSendCb(p2pInfo* p2p, uint8_t* recipient_mac_addr, mt_tx_status status);
 void ICACHE_FLASH_ATTR p2pRecvCb(p2pInfo* p2p, uint8_t* senders_mac_addr, uint8_t* data, uint8_t len, uint8_t rssi,
                                  uint16_t recvCbCnt);
 

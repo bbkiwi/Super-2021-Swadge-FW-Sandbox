@@ -84,7 +84,6 @@ bool ringLongPress;
 // TODO remove eventually
 // For debugging
 uint16_t recvCbCnt;
-uint16_t sendCbCnt;
 
 static led_t leds[NUM_LIN_LEDS] = {{0}};
 // When using gamma correcton
@@ -320,10 +319,9 @@ void ICACHE_FLASH_ATTR ringEspNowRecvCb(uint8_t* mac_addr, uint8_t* data, uint8_
 void ICACHE_FLASH_ATTR ringEspNowSendCb(uint8_t* mac_addr, mt_tx_status status)
 {
     uint8_t i;
-    sendCbCnt++;
     for(i = 0; i < lengthof(connections); i++)
     {
-        p2pSendCb(&(connections[i]), mac_addr, status, sendCbCnt);
+        p2pSendCb(&(connections[i]), mac_addr, status);
     }
     ringUpdateDisplay();
 }

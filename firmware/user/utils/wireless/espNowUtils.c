@@ -216,6 +216,7 @@ void ICACHE_FLASH_ATTR espNowSend(uint8_t* mac_addr, const uint8_t* data, uint8_
     // Call this before each transmission to set the wifi speed
     wifi_set_user_fixed_rate(FIXED_RATE_MASK_ALL, PHY_RATE_54);
 
+
     // Send a packet
 #ifdef ALWAYS_BROADCAST
     esp_now_send((uint8_t*)espNowBroadcastMac, (uint8_t*)data, len);

@@ -602,10 +602,10 @@ void ICACHE_FLASH_ATTR swadgeModeEspNowRecvCb(uint8_t* mac_addr, uint8_t* data, 
  */
 void ICACHE_FLASH_ATTR swadgeModeEspNowSendCb(uint8_t* mac_addr, mt_tx_status status)
 {
-    os_printf("%s::%d\n", __func__, __LINE__);
+    os_printf("user_main %s::%d checking if mode has espNowSendCb\n", __func__, __LINE__);
     if(swadgeModeInit && NULL != swadgeModes[rtcMem.currentSwadgeMode]->fnEspNowSendCb)
     {
-        os_printf("%s::%d\n", __func__, __LINE__);
+        os_printf("user_main %s::%d calling it\n", __func__, __LINE__);
         swadgeModes[rtcMem.currentSwadgeMode]->fnEspNowSendCb(mac_addr, (mt_tx_status)status);
     }
 }

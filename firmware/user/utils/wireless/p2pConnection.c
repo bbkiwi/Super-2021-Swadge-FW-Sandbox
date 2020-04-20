@@ -29,14 +29,15 @@
 //#define HANDLE_MSG_TO_RESTARTED_SWADGE
 //#define SHOW_DISCARD
 //#define SHOW_DUMP
-// TEST_SENDCNT identifies which p2pSendCb is not associated
-//    with a send by counting
+// TEST_SEND_ID identifies which p2pSendCb is associated
+//    with a send by assigning an id to each espnowsend.
+//    This is stored in the p2pInfo of the connection that does the send
 // used when ALWAYS_BROADCAST is defined in espNowUtils.c
 //    (this is how adam original works)
 // If ALWAYS_BROADCAST is not defined, direct sending to otherMac
 //     is used, and alternative code is used in p2pSendCb
 #ifdef ALWAYS_BROADCAST
-    #define TEST_SENDCNT
+    #define TEST_SEND_ID
 #endif
 
 #define P2P_DEBUG_PRINT
@@ -85,6 +86,9 @@ const char p2pNoPayloadMsgFmt[]  = "%s_%s_%c%c_%02X:%02X:%02X:%02X:%02X:%02X_%1X
 
 const char p2pPayloadMsgFmt[]    = "%s_%s_%c%c_%02X:%02X:%02X:%02X:%02X:%02X_%1X%1X_%02X_%s";
 const char p2pMacFmt[] = "%02X:%02X:%02X:%02X:%02X:%02X";
+
+// Every send if given a unique sequence number
+uint16_t p2pEspSendId;
 
 /*============================================================================
  * Function Prototypes
@@ -590,7 +594,11 @@ void ICACHE_FLASH_ATTR p2pSendMsgEx(p2pInfo* p2p, char* msg, uint16_t len,
         p2p_printf("   time started %u\n", p2p->ack.timeSentUs);
     }
     //TODO NOTE see start of code, using mod of espNowSend which can send to specific or broadcast
-    p2p->sendCnt++;
+
+    // Update send id
+    p2pEspSendId++;
+    p2p->sendId = p2pEspSendId;
+    p2p_printf("%s side sending message with id=%d\n", p2p->side == LEFT ? "LEFT" : "RIGHT", p2p->sendId);
     espNowSend(p2p->cnc.otherMac, (const uint8_t*)msg, len);
 }
 
@@ -1258,21 +1266,16 @@ void ICACHE_FLASH_ATTR p2pRestart(void* arg)
  * @param recipient_mac_addr that transmission was sent to
  * @param status   Whether the transmission succeeded or failed
  */
-void ICACHE_FLASH_ATTR p2pSendCb(p2pInfo* p2p, uint8_t* recipient_mac_addr, mt_tx_status status, uint16_t sendCbCnt)
+void ICACHE_FLASH_ATTR p2pSendCb(p2pInfo* p2p, uint8_t* recipient_mac_addr, mt_tx_status status)
 {
-#ifdef TEST_SENDCNT
-    p2p_printf("SendCb %d p2p->sendCnt = %d\r\n", sendCbCnt, p2p->sendCnt);
-    if (p2p->sendCnt == 0)
+#ifdef TEST_SEND_ID
+    p2p_printf("p2pEspSendId=%d, p2p->sendId = %d\r\n", p2pEspSendId, p2p->sendId);
+    if (p2p->sendId != p2pEspSendId)
     {
         p2p_printf("   not from send by %s %s, do nothing\r\n", p2p->msgId,
                    p2p->side == LEFT ? "LEFT" : "RIGHT");
         return;
     }
-    if (p2p->sendCnt < 0)
-    {
-        p2p_printf("   ERROR sendCnt negative r\n");
-    }
-    p2p->sendCnt--;
 #else
     bool broadcast = (recipient_mac_addr[0] == 0xFF) && (recipient_mac_addr[1] == 0xFF) && (recipient_mac_addr[2] == 0xFF)
                      && (recipient_mac_addr[3] == 0xFF) && (recipient_mac_addr[4] == 0xFF) && (recipient_mac_addr[5] == 0xFF);

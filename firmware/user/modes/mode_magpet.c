@@ -195,7 +195,7 @@ void ICACHE_FLASH_ATTR magpetEspNowRecvCb(uint8_t* mac_addr, uint8_t* data,
 void ICACHE_FLASH_ATTR magpetEspNowSendCb(uint8_t* mac_addr, mt_tx_status status)
 {
     os_printf("%s::%d\n", __func__, __LINE__);
-    p2pSendCb(&connection, mac_addr, status, 0);
+    p2pSendCb(&connection, mac_addr, status);
     magpetUpdateDisplay();
 }
 
